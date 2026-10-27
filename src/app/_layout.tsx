@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initStorage } from '@/storage/posts';
+import { useAutoSync } from '@/sync/useAutoSync';
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 
 export default function RootLayout() {
@@ -20,6 +21,7 @@ export default function RootLayout() {
 
 function Navigation() {
   const { scheme, colors } = useTheme();
+  useAutoSync();
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   return (
     <NavigationThemeProvider

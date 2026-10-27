@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -8,7 +8,9 @@ import Feather from '@expo/vector-icons/Feather';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { rootDir } from '@/storage/paths';
 import { countPosts, rebuildIndex } from '@/storage/posts';
-import { getPhotoQuality, setPhotoQuality, type PhotoQuality } from '@/storage/settings';
+import { getPhotoQuality, getWifiOnly, setPhotoQuality, setWifiOnly, type PhotoQuality } from '@/storage/settings';
+import { connect, describeAuthError, disconnect } from '@/sync/auth';
+import { refreshSyncState, resendAll, restoreFromDrive, syncNow, useSyncState } from '@/sync/engine';
 import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -23,14 +25,12 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Тёмная' },
 ];
 
-type Overview = { quality: PhotoQuality; posts: number; queued: number; used: number; free: number };
+type Overview = { quality: PhotoQuality; posts: number; used: number; free: number };
 
 async function loadOverview(db: SQLiteDatabase): Promise<Overview> {
-  const queued = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM outbox');
   return {
     quality: await getPhotoQuality(db),
     posts: await countPosts(db),
-    queued: queued?.n ?? 0,
     used: rootDir().size ?? 0,
     free: Paths.availableDiskSpace,
   };
@@ -47,6 +47,7 @@ export default function Settings() {
   const { colors, mode, setMode } = useTheme();
   const { data, reload } = useDbQuery<Overview | null>(loadOverview, null);
   const [busy, setBusy] = useState(false);
+  const sync = useSyncState();
 
   const chooseQuality = useCallback(
     async (value: PhotoQuality) => {
@@ -75,15 +76,7 @@ export default function Settings() {
         <Text style={styles.title}>Настройки</Text>
 
         <Text style={styles.section}>Google Drive</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Feather name="cloud-off" size={18} color={colors.muted} />
-            <Text style={styles.cardTitle}>Не подключён</Text>
-          </View>
-          <Text style={styles.note}>
-            Отправка копий в Drive появится в следующей версии. Ждут отправки записей: {data?.queued ?? 0}.
-          </Text>
-        </View>
+        <DriveSection onChanged={reload} />
 
         <Text style={styles.section}>Тема</Text>
         <View style={styles.segment}>
@@ -128,12 +121,14 @@ export default function Settings() {
         ) : (
           <ActivityIndicator color={colors.muted} />
         )}
-        <View style={styles.warn}>
-          <Text style={styles.warnText}>
-            Пока нет синхронизации с Google Drive, записи хранятся только на телефоне. При удалении приложения Android
-            спросит, сохранить ли данные: отвечай «Да».
-          </Text>
-        </View>
+        {!sync.account && (
+          <View style={styles.warn}>
+            <Text style={styles.warnText}>
+              Пока Google Drive не подключён, записи хранятся только на телефоне. При удалении приложения Android
+              спросит, сохранить ли данные: отвечай «Да».
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.section}>Обслуживание</Text>
         <Pressable style={styles.button} onPress={rebuild} disabled={busy}>
@@ -141,6 +136,145 @@ export default function Settings() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function formatSyncTime(iso: string | null): string {
+  if (!iso) return 'ещё не было';
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)} в ${iso.slice(11, 16)}`;
+}
+
+function DriveSection({ onChanged }: { onChanged: () => void }) {
+  const db = useSQLiteContext();
+  const styles = useStyles(makeStyles);
+  const { colors } = useTheme();
+  const sync = useSyncState();
+  const wifi = useDbQuery(getWifiOnly, false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const run = async (label: string, task: () => Promise<void>) => {
+    setBusy(label);
+    try {
+      await task();
+    } catch (e) {
+      Alert.alert('Google Drive', describeAuthError(e));
+    } finally {
+      setBusy(null);
+      onChanged();
+    }
+  };
+
+  const onConnect = () =>
+    run('connect', async () => {
+      const account = await connect();
+      if (!account) return;
+      await refreshSyncState(db, account);
+      void syncNow(db, { ignoreWifi: true });
+    });
+
+  const onRestore = () =>
+    run('restore', async () => {
+      const n = await restoreFromDrive(db, (done, total) => setBusy(`restore:${done} из ${total}`));
+      Alert.alert('Восстановление', n ? `Записей в дневнике: ${n}.` : 'В Drive не нашлось папки «Плёнка».');
+    });
+
+  const onDisconnect = () =>
+    Alert.alert('Отключить Google Drive?', 'Записи на телефоне и копии в Drive останутся. Новые записи перестанут отправляться.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Отключить',
+        style: 'destructive',
+        onPress: () =>
+          run('disconnect', async () => {
+            await disconnect();
+            await refreshSyncState(db, null);
+          }),
+      },
+    ]);
+
+  const onResend = () =>
+    Alert.alert('Отправить всё заново?', 'Все записи будут заново сверены с Drive и дозагружены. Это может занять время и трафик.', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Отправить', onPress: () => run('resend', () => resendAll(db)) },
+    ]);
+
+  if (!sync.account) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Feather name="cloud-off" size={18} color={colors.muted} />
+          <Text style={styles.cardTitle}>Не подключён</Text>
+        </View>
+        <Text style={styles.note}>
+          Копии записей будут уходить в папку «Плёнка» на твоём Drive. Приложение видит только эту папку. Ждут отправки:{' '}
+          {sync.queued}.
+        </Text>
+        <Pressable style={styles.primary} onPress={onConnect} disabled={busy !== null}>
+          {busy === 'connect' ? (
+            <ActivityIndicator color={colors.onAccent} />
+          ) : (
+            <Text style={styles.primaryText}>Подключить Google Drive</Text>
+          )}
+        </Pressable>
+      </View>
+    );
+  }
+
+  const status = sync.running
+    ? `Отправляю: ${sync.done} из ${sync.total}`
+    : sync.waitingForWifi
+      ? `Ждут Wi-Fi: ${sync.queued}`
+      : sync.queued > 0
+        ? `Ждут отправки: ${sync.queued}`
+        : 'Всё отправлено';
+  const locked = busy !== null || sync.running;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.row}>
+        <Feather name="cloud" size={18} color={colors.accent} />
+        <Text style={[styles.cardTitle, styles.flex]} numberOfLines={1}>
+          {sync.account.email}
+        </Text>
+      </View>
+      <Text style={styles.stat}>{status}</Text>
+      <Text style={styles.note}>Последняя синхронизация: {formatSyncTime(sync.lastSyncAt)}</Text>
+      {sync.error && <Text style={styles.error}>{sync.error}</Text>}
+      {busy?.startsWith('restore') && <Text style={styles.note}>Скачиваю из Drive: {busy.split(':')[1] ?? '…'}</Text>}
+
+      <View style={[styles.row, styles.between]}>
+        <Text style={styles.optionTitle}>Только по Wi-Fi</Text>
+        <Switch
+          value={wifi.data}
+          onValueChange={async (value) => {
+            await setWifiOnly(db, value);
+            wifi.reload();
+            if (!value) void syncNow(db);
+          }}
+          trackColor={{ true: colors.accent, false: colors.line }}
+          thumbColor={colors.card}
+        />
+      </View>
+
+      <Pressable style={styles.primary} onPress={() => run('sync', () => syncNow(db, { ignoreWifi: true }))} disabled={locked}>
+        {sync.running || busy === 'sync' ? (
+          <ActivityIndicator color={colors.onAccent} />
+        ) : (
+          <Text style={styles.primaryText}>Синхронизировать сейчас</Text>
+        )}
+      </Pressable>
+      <View style={styles.row}>
+        <Pressable style={[styles.button, styles.flex]} onPress={onRestore} disabled={locked}>
+          <Text style={styles.buttonText}>Восстановить</Text>
+        </Pressable>
+        <Pressable style={[styles.button, styles.flex]} onPress={onResend} disabled={locked}>
+          <Text style={styles.buttonText}>Отправить всё</Text>
+        </Pressable>
+      </View>
+      <Pressable style={styles.textButton} onPress={onDisconnect} disabled={busy !== null}>
+        <Text style={styles.danger}>Отключить Drive</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -159,6 +293,13 @@ const makeStyles = (c: Palette) =>
     },
     card: { backgroundColor: c.card, borderRadius: 12, borderWidth: 1, borderColor: c.line, padding: 12, gap: 6 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    between: { justifyContent: 'space-between' },
+    flex: { flex: 1 },
+    primary: { backgroundColor: c.accent, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+    primaryText: { color: c.onAccent, fontSize: 15, fontWeight: '700' },
+    error: { fontSize: 13, color: c.danger, lineHeight: 19 },
+    textButton: { alignSelf: 'center', padding: 8 },
+    danger: { fontSize: 14, fontWeight: '600', color: c.danger },
     cardTitle: { fontSize: 15, fontWeight: '600', color: c.ink },
     segment: { flexDirection: 'row', padding: 2, borderRadius: 10, backgroundColor: c.photoBg },
     segItem: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },

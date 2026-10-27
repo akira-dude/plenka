@@ -7,6 +7,7 @@ import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { mediaUri } from '@/storage/paths';
 import { deletePost, getPost } from '@/storage/posts';
+import { syncNow, syncedRev, useSyncState } from '@/sync/engine';
 import { PhotoFrame, clampRatio } from '@/ui/PhotoFrame';
 import { fonts, space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -22,7 +23,14 @@ export default function PostScreen() {
   const { width, height } = useWindowDimensions();
   const [page, setPage] = useState(0);
 
-  const query = useCallback((database: SQLiteDatabase) => getPost(database, id), [id]);
+  const sync = useSyncState();
+  const query = useCallback(
+    async (database: SQLiteDatabase) => {
+      const found = await getPost(database, id);
+      return found ? { ...found, synced: await syncedRev(database, id) } : null;
+    },
+    [id],
+  );
   const { data } = useDbQuery(query, null);
 
   const confirmDelete = () =>
@@ -33,6 +41,7 @@ export default function PostScreen() {
         style: 'destructive',
         onPress: async () => {
           await deletePost(db, id);
+          void syncNow(db);
           router.back();
         },
       },
@@ -46,6 +55,11 @@ export default function PostScreen() {
   const first = post.media[0];
   const frameRatio = first ? clampRatio(first.w / first.h, width / (height * MAX_PHOTO_SHARE), PANORAMA_RATIO) : 1;
   const hasCoords = post.place?.lat != null && post.place.lon != null;
+  const status = !sync.account
+    ? 'только на телефоне'
+    : data.synced !== null && data.synced >= post.rev
+      ? 'в Google Drive'
+      : 'ждёт отправки в Drive';
 
   return (
     <View style={styles.screen}>
@@ -119,7 +133,9 @@ export default function PostScreen() {
           )}
           {post.text ? <Text style={styles.text}>{post.text}</Text> : null}
           {post.tags.length > 0 && <Text style={styles.tags}>{post.tags.map((t) => `#${t}`).join(' ')}</Text>}
-          <Text style={[styles.stamp, styles.footer]}>на телефоне · правка {post.rev}</Text>
+          <Text style={[styles.stamp, styles.footer]}>
+            {status} · правка {post.rev}
+          </Text>
         </View>
       </ScrollView>
     </View>

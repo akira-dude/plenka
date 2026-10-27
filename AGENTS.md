@@ -1,6 +1,6 @@
 # Plenka (Плёнка) — agent guide
 
-Personal offline-first photo diary for Android. Expo + React Native + TypeScript. One user, one phone, no sharing, no video, no encryption. Every post is a plain folder (`post.json` + images); Google Drive is a one-way backup target (stage 3, not built yet).
+Personal offline-first photo diary for Android. Expo + React Native + TypeScript. One user, one phone, no sharing, no video, no encryption. Every post is a plain folder (`post.json` + images); Google Drive is a one-way backup target (`src/sync/`).
 
 Details are read on demand: `docs/agent/INDEX.md`.
 
@@ -18,6 +18,7 @@ Details are read on demand: `docs/agent/INDEX.md`.
 | `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
 | `src/ui/` | Shared components, `theme.ts` (light/dark palettes), `ThemeProvider.tsx` (`useTheme`, `useStyles`), `mapHtml.ts` (Leaflet page for the map WebView) |
 | `src/device/` | Device services: `location.ts` (GPS, reverse geocoding) |
+| `src/sync/` | Google Drive backup: `auth.ts` (Google sign-in, web client id), `drive.ts` (REST v3 client), `engine.ts` (outbox → Drive, restore, `useSyncState`), `useAutoSync.ts` (triggers) |
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |
 | `docs/agent/` | Architecture, data format contract, roadmap |
@@ -34,6 +35,7 @@ Details are read on demand: `docs/agent/INDEX.md`.
 7. Android only. Do not add iOS/web-specific code paths.
 8. **Colors only from the palette.** Styles are built as `const makeStyles = (c: Palette) => StyleSheet.create(...)` and used via `useStyles(makeStyles)`; never hardcode a color in a screen (exception: the always-black full-screen viewer).
 9. The post number (`№ N`) is not stored: it is the post's rank by `createdAt`, computed in SQL (`NUMBERED` in `posts.ts`).
+10. Sync is one-way (phone → Drive) and only reads local files; it never changes a post. After a screen saves or deletes a post it calls `syncNow(db)`; nothing else should talk to Drive.
 
 ## Expo has changed — do not trust your training data
 

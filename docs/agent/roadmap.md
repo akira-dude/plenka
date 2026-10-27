@@ -15,5 +15,5 @@
    - Next: custom in-app camera for several shots in a row (`expo-camera`), optional "also save to gallery" toggle (`expo-media-library`), app icon and splash.
    - Not verified on a device yet: everything from the second batch above.
 2. **Transfer** — zip export/import of the root folder, PC viewer `index.html` + `feed.js`.
-3. **Google Drive** — the user expects it next. Needs from the user: a Google Cloud project with the Drive API enabled, OAuth consent screen in production, an Android OAuth client for `dev.akiradude.plenka` with the SHA-1 of the EAS keystore. Then: Google sign-in, drain `outbox` (media first, `post.json` last, skip by `sha256`), restore into an empty app, background task, "photos only over Wi-Fi".
+3. **Google Drive** — code done 2026-10-27, not tested on a device yet. Google Cloud project `Plenka` is set up by the user (consent screen published, Android + Web clients). Done: sign-in, outbox upload, deletes and moves, restore, Wi-Fi-only toggle, status in feed/post/settings. Next: background sync task, restore offer on the first-run screen, lazy download of originals.
 4. **Comfort** — search, tags list, "on this day", free up space by evicting old originals (thumbnails stay).

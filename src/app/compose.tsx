@@ -13,6 +13,7 @@ import { mediaUri } from '@/storage/paths';
 import type { PickedPhoto } from '@/storage/photos';
 import { getPost, savePost } from '@/storage/posts';
 import { getPhotoQuality } from '@/storage/settings';
+import { syncNow } from '@/sync/engine';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -182,6 +183,7 @@ export default function Compose() {
         quality,
         params.id,
       );
+      void syncNow(db);
       if (editing) router.back();
       else router.replace(`/post/${post.id}`);
     } catch (e) {

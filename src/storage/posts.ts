@@ -63,7 +63,7 @@ export async function getPost(db: SQLiteDatabase, id: string): Promise<IndexedPo
   return row ? toIndexed(row) : null;
 }
 
-async function getStored(db: SQLiteDatabase, id: string): Promise<{ post: Post; dir: string } | null> {
+export async function getStored(db: SQLiteDatabase, id: string): Promise<{ post: Post; dir: string } | null> {
   const row = await db.getFirstAsync<{ json: string; dir: string }>('SELECT json, dir FROM posts WHERE id = ?', id);
   return row ? { post: JSON.parse(row.json) as Post, dir: row.dir } : null;
 }

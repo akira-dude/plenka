@@ -31,6 +31,18 @@ const MIGRATIONS = [
   CREATE INDEX posts_created ON posts (created_at);
   ALTER TABLE posts ADD COLUMN search TEXT NOT NULL DEFAULT '';
   `,
+  `
+  CREATE TABLE drive_files (
+    path TEXT PRIMARY KEY NOT NULL,
+    drive_id TEXT NOT NULL,
+    sha256 TEXT
+  );
+  CREATE TABLE synced_posts (
+    post_id TEXT PRIMARY KEY NOT NULL,
+    dir TEXT NOT NULL,
+    rev INTEGER NOT NULL
+  );
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

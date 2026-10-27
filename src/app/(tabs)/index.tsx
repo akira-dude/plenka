@@ -8,6 +8,7 @@ import { monthTitle } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { listFeed, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
+import { useSyncState } from '@/sync/engine';
 import { PostCard } from '@/ui/PostCard';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -22,6 +23,7 @@ export default function Feed() {
   const { width } = useWindowDimensions();
   const { data } = useDbQuery(listFeed, []);
   const [grid, setGrid] = useState(false);
+  const sync = useSyncState();
   const cardWidth = width - space.gutter * 2;
   const cell = (cardWidth - GRID_GAP * 2) / 3;
 
@@ -43,9 +45,17 @@ export default function Feed() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.logo}>Плёнка</Text>
-        <Pressable style={styles.iconButton} hitSlop={8} onPress={() => router.push('/map')}>
-          <Feather name="map" size={20} color={colors.ink} />
-        </Pressable>
+        <View style={styles.headerRight}>
+          {sync.account && (sync.running || sync.queued > 0) && (
+            <Pressable style={styles.pill} onPress={() => router.push('/settings')}>
+              <Feather name={sync.running ? 'refresh-cw' : 'upload-cloud'} size={12} color={colors.amber} />
+              <Text style={styles.pillText}>{sync.running ? 'отправка' : `ждут: ${sync.queued}`}</Text>
+            </Pressable>
+          )}
+          <Pressable style={styles.iconButton} hitSlop={8} onPress={() => router.push('/map')}>
+            <Feather name="map" size={20} color={colors.ink} />
+          </Pressable>
+        </View>
       </View>
       <View style={styles.segment}>
         {(['Лента', 'Сетка'] as const).map((label, i) => {
@@ -117,6 +127,17 @@ const makeStyles = (c: Palette) =>
       paddingBottom: 10,
     },
     logo: { fontSize: 24, fontWeight: '800', color: c.ink, letterSpacing: -0.5 },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    pill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: c.amberSoft,
+      borderRadius: 99,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    pillText: { fontSize: 12, fontWeight: '600', color: c.amber },
     iconButton: { padding: 8 },
     segment: {
       flexDirection: 'row',

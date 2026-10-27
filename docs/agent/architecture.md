@@ -8,6 +8,7 @@ src/app (routes, screens)
    ├── src/ui        PhotoFrame, PostCard, PostRow, ZoomableImage, ThemeProvider, mapHtml
    ├── src/hooks     useDbQuery
    ├── src/device    location (GPS, reverse geocoding)
+   ├── src/sync      Google sign-in, Drive client, sync engine
    └── src/storage   posts (repository) ── photos ── paths ── files ── db ── settings
                          │
                      src/domain   post format, dates, ulid  (pure, no Expo UI)
@@ -23,7 +24,9 @@ src/app (routes, screens)
   - `posts` — one row per post; `json` holds the full `post.json`, other columns exist for filtering/sorting (`day`, `created_at`, `deleted`) and `search` (lowercased text + tags + place, because SQLite `lower`/`LIKE` ignore Cyrillic case).
   - Post numbers are computed, not stored: `ROW_NUMBER() OVER (ORDER BY created_at, id)` over non-deleted posts, so a post written for an earlier date takes its place in the sequence.
   - `outbox` — post ids changed since the last upload (filled now, drained by the future Drive sync).
-  - `settings` — key/value (`photoQuality`, `themeMode`).
+  - `settings` — key/value (`photoQuality`, `themeMode`, `wifiOnly`, `lastSyncAt`).
+  - `drive_files` — local path (relative to the root, `''` = the root folder) → Drive file id (+ `sha256` for media).
+  - `synced_posts` — post id → folder and `rev` last uploaded; used to detect moved folders and to show «в Google Drive».
 - `initStorage` (run by `SQLiteProvider.onInit`): migrate → ensure root + `manifest.json` → if the index is empty or has rows without `search`, `rebuildIndex` from files (this is also the import path for a copied folder).
 
 ## Write path (`src/storage/posts.ts`)
@@ -73,3 +76,14 @@ Screens reload their data on focus via `useDbQuery`; there is no global store.
 ## Location
 
 `src/device/location.ts`, foreground permission only. A new post (not an edit, not opened from the archive with a date) asks for the current position on open; EXIF GPS of a picked photo wins over the device position; the crosshair button forces a fresh device fix. Reverse geocoding fills the place name only when the field is empty and gives up quietly offline.
+
+## Google Drive sync (`src/sync/`)
+
+- Auth: `@react-native-google-signin/google-signin`, scope `drive.file`, `webClientId` = the Web OAuth client of Google Cloud project `Plenka`. The Android OAuth client there is bound to package `dev.akiradude.plenka` + SHA-1 of the EAS keystore; a different signing key (local debug build) needs its own Android client. `DEVELOPER_ERROR` (code 10) means that pair does not match.
+- Drive layout mirrors the local root: `My Drive/Плёнка/manifest.json`, `posts/YYYY/MM/<post>/{post.json,media/*,thumbs/*}`.
+- `syncNow(db)`: skip if not signed in, offline, or Wi-Fi-only on mobile data. For each `outbox` row (oldest first): a deleted post → trash its Drive folder; a moved post (date changed) → trash the old folder; upload media (skipped when `sha256` matches), thumbnails (once), trash media that left the post, upload `post.json` last; then delete the outbox row only if `rev` did not change meanwhile.
+- Uploads: media via resumable session + `File.upload` (native, binary); `post.json` via multipart / media PATCH. Missing mappings are looked up by name in the parent folder before creating, so a reinstall does not duplicate files.
+- A 404 from Drive (folder deleted outside the app) resets `drive_files` / `synced_posts` and re-queues every post.
+- Triggers (`useAutoSync`, mounted in the root layout): app start, app back to foreground, network reconnect; plus `syncNow` after save/delete. No background task yet.
+- Restore (`restoreFromDrive`): walk the `Плёнка` folder, download files missing locally, `rebuildIndex`, mark everything as synced. Existing local files are never overwritten.
+- UI state lives in a module store (`useSyncState`): account, running, done/total, queued, last sync, error.

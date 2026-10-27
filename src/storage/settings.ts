@@ -28,3 +28,19 @@ export async function getThemeMode(db: SQLiteDatabase): Promise<ThemeMode> {
 export async function setThemeMode(db: SQLiteDatabase, mode: ThemeMode): Promise<void> {
   await set(db, 'themeMode', mode);
 }
+
+export async function getWifiOnly(db: SQLiteDatabase): Promise<boolean> {
+  return (await get(db, 'wifiOnly')) === '1';
+}
+
+export async function setWifiOnly(db: SQLiteDatabase, value: boolean): Promise<void> {
+  await set(db, 'wifiOnly', value ? '1' : '0');
+}
+
+export async function getLastSyncAt(db: SQLiteDatabase): Promise<string | null> {
+  return get(db, 'lastSyncAt');
+}
+
+export async function setLastSyncAt(db: SQLiteDatabase, iso: string): Promise<void> {
+  await set(db, 'lastSyncAt', iso);
+}
