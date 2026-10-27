@@ -94,3 +94,10 @@ export function monthCells(ym: string): (string | null)[] {
   while (cells.length % 7) cells.push(null);
   return cells;
 }
+
+export function yearsAgo(years: number): string {
+  const tail = years % 100;
+  const last = years % 10;
+  const word = tail >= 11 && tail <= 14 ? 'лет' : last === 1 ? 'год' : last >= 2 && last <= 4 ? 'года' : 'лет';
+  return `${years} ${word} назад`;
+}

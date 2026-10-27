@@ -2,14 +2,16 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import Feather from '@expo/vector-icons/Feather';
 import { sharePhoto } from '@/device/share';
 import { useDbQuery } from '@/hooks/useDbQuery';
-import { mediaUri } from '@/storage/paths';
+import type { MediaItem } from '@/domain/post';
+import { useMediaUri } from '@/hooks/useMediaUri';
 import { getPost } from '@/storage/posts';
+import { originalUri } from '@/sync/media';
 import { ZoomableImage } from '@/ui/ZoomableImage';
 import { fonts } from '@/ui/theme';
 
@@ -29,10 +31,13 @@ export default function Viewer() {
   const { data } = useDbQuery(query, null);
   const media = data?.post.media ?? [];
 
-  const share = (uri: string) =>
-    sharePhoto(uri).catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
+  const db = useSQLiteContext();
+  const share = (dir: string, m: MediaItem) =>
+    originalUri(db, dir, m)
+      .then(sharePhoto)
+      .catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
 
-  const current = data && media.length ? mediaUri(data.dir, media[Math.min(page, media.length - 1)].file) : null;
+  const current = data && media.length ? media[Math.min(page, media.length - 1)] : null;
 
   return (
     <View style={styles.screen}>
@@ -49,19 +54,16 @@ export default function Viewer() {
           showsHorizontalScrollIndicator={false}
           keyExtractor={(m) => m.file}
           onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
-          renderItem={({ item }) => {
-            const uri = mediaUri(data.dir, item.file);
-            return (
-              <ZoomableImage
-                uri={uri}
-                width={width}
-                height={height}
-                onZoomChange={setZoomed}
-                onDismiss={() => router.back()}
-                onShare={() => share(uri)}
-              />
-            );
-          }}
+          renderItem={({ item }) => (
+            <ViewerPage
+              dir={data.dir}
+              item={item}
+              width={width}
+              height={height}
+              onZoomChange={setZoomed}
+              onShare={() => share(data.dir, item)}
+            />
+          )}
         />
       )}
       <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
@@ -78,12 +80,35 @@ export default function Viewer() {
           hitSlop={8}
           accessibilityLabel="Поделиться фото"
           disabled={!current}
-          onPress={() => current && share(current)}
+          onPress={() => data && current && share(data.dir, current)}
         >
           <Feather name="share-2" size={22} color={VIEWER_FG} />
         </Pressable>
       </View>
     </View>
+  );
+}
+
+type PageProps = {
+  dir: string;
+  item: MediaItem;
+  width: number;
+  height: number;
+  onZoomChange: (zoomed: boolean) => void;
+  onShare: () => void;
+};
+
+function ViewerPage({ dir, item, width, height, onZoomChange, onShare }: PageProps) {
+  const uri = useMediaUri(dir, item, true);
+  return (
+    <ZoomableImage
+      uri={uri}
+      width={width}
+      height={height}
+      onZoomChange={onZoomChange}
+      onDismiss={() => router.back()}
+      onShare={onShare}
+    />
   );
 }
 

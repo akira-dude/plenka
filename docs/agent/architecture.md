@@ -8,7 +8,7 @@ src/app (routes, screens)
    ├── src/ui        PhotoFrame, PostCard, PostRow, ZoomableImage, ThemeProvider, mapHtml
    ├── src/hooks     useDbQuery
    ├── src/device    location (GPS, reverse geocoding)
-   ├── src/sync      Google sign-in, Drive client, sync engine
+   ├── src/sync      CloudStore interface, Google Drive store, sync engine, lazy originals
    └── src/storage   posts (repository) ── photos ── paths ── files ── db ── settings
                          │
                      src/domain   post format, dates, ulid  (pure, no Expo UI)
@@ -57,7 +57,7 @@ src/app (routes, screens)
 
 | Route | File | Notes |
 | --- | --- | --- |
-| Feed | `src/app/(tabs)/index.tsx` | Paged: `listFeedPage(month, limit)` loads 30 more on scroll end (on focus it reloads the same count, so scroll stays); month counts come from a separate `GROUP BY` query; the list `key` includes the month, so a month change remounts it at the top. Cards (`PostCard`, memoized) have a lazy photo pager (`initialNumToRender=1`, `windowSize=3`) with the thumbnail as placeholder. Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
+| Feed | `src/app/(tabs)/index.tsx` | Paged: `listFeedPage(month, limit)` loads 30 more on scroll end (on focus it reloads the same count, so scroll stays); month counts come from a separate `GROUP BY` query; the list `key` includes the month, so a month change remounts it at the top. Cards (`PostCard`, memoized) have a lazy photo pager (`initialNumToRender=1`, `windowSize=3`) with the thumbnail as placeholder. «В этот день» header (`OnThisDay`, `listOnThisDay`: same month-day in earlier years, only without a month filter). Empty diary → `RestoreOffer` (connect + merge). Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Months after the current one are blocked (right arrow disabled, picker `max`). Tapping the month title opens `MonthPicker` with `allowEmpty`, `max` and no «Все месяцы». Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
 | Search | `src/app/(tabs)/search.tsx` | Empty query → tag cloud: equal blue chips «#tag count», most used first (the user rejected size-by-count). Typing → tag suggestions + text/tag/place search over the `search` column; `#tag` (also set by tapping a tag here or a `TagLinks` chip in a post / feed card, which navigates with params `tag` + `at`) → exact tag search. Results (`SearchResult`) show tags and highlight the matched words |
@@ -85,7 +85,10 @@ Screens reload their data on focus via `useDbQuery`; there is no global store.
 - Uploads: media via resumable session + `File.upload` (native, binary); `post.json` via multipart / media PATCH. Missing mappings are looked up by name in the parent folder before creating, so a reinstall does not duplicate files.
 - A 404 from Drive (folder deleted outside the app) resets `drive_files` / `synced_posts` and re-queues every post.
 - Triggers (`useAutoSync`, mounted in the root layout): app start, app back to foreground, network reconnect; plus `syncNow` after save/delete. No background task yet.
-- Restore (`restoreFromDrive`): walk the `Плёнка` folder, download files missing locally, `rebuildIndex`, mark everything as synced. Existing local files are never overwritten.
+- Provider: the engine only knows `CloudStore` (`src/sync/store.ts`): path-based put/remove/list/read/download plus `hasCopy` / `markStored` for «this exact file is in the cloud». `DriveStore` implements it and keeps the Drive-specific `drive_files` path → id + sha mapping. A future home-server backend is another implementation; `openStore(db)` picks it.
+- Merge (`mergeFromCloud`, Settings → «Объединить», empty-feed offer `RestoreOffer`): list every cloud file (refreshes the id mapping and drops mappings of files gone from the cloud), read each `post.json`; per post id the higher `rev` wins. A cloud post that wins replaces the local one (old folder removed if the date moved): its `post.json` and thumbnails are downloaded, originals are not; local originals with a different `sha256` are deleted. Then `rebuildIndex`; local posts missing in the cloud or newer than it go to the outbox and `syncNow` runs. Result: the union of phone and cloud on both sides.
+- Lazy originals (`src/sync/media.ts`): an original may be absent locally (merge, «Освободить место»). `useMediaUri(dir, item, fetch)` returns the original if present, else the thumbnail, and with `fetch` downloads it once (`fetchOriginal`, deduped, re-renders via a module store). Post screen and viewer fetch; feed cards do not. Share and quality-lowering call `originalUri`, which fails with a readable message offline. `DriveStore.putFile` for a missing local original only re-links the existing cloud file.
+- Free up space (Settings → «На телефоне» → «Освободить место», only when the cloud is connected): `findFreeable` = originals of posts synced at their current `rev`, not in the outbox, whose cloud copy has the same `sha256`; the user picks «older than 3 months» or «all»; thumbnails stay.
 - UI state lives in a module store (`useSyncState`): account, running, done/total, queued, last sync, error.
 
 ## Sharing

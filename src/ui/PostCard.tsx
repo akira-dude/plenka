@@ -3,8 +3,8 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { dayKey, formatDayShort, timeOf } from '@/domain/dates';
 import type { IndexedPost } from '@/storage/posts';
-import { mediaUri } from '@/storage/paths';
-import { FEED_MAX_RATIO, FEED_MIN_RATIO, PhotoFrame, clampRatio } from './PhotoFrame';
+import { MediaFrame } from './MediaFrame';
+import { FEED_MAX_RATIO, FEED_MIN_RATIO, clampRatio } from './PhotoFrame';
 import { TagLinks } from './TagLinks';
 import { fonts, type Palette } from './theme';
 import { useStyles } from './ThemeProvider';
@@ -24,13 +24,7 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
     <View style={styles.card}>
       {cover && post.media.length === 1 && (
         <Pressable onPress={open}>
-          <PhotoFrame
-            uri={mediaUri(dir, cover.file)}
-            blurUri={mediaUri(dir, cover.thumb)}
-            w={cover.w}
-            h={cover.h}
-            width={width}
-          />
+          <MediaFrame dir={dir} item={cover} fetch={false} width={width} />
         </Pressable>
       )}
       {post.media.length > 1 && (
@@ -48,14 +42,7 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
             onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item: m }) => (
               <Pressable onPress={open}>
-                <PhotoFrame
-                  uri={mediaUri(dir, m.file)}
-                  blurUri={mediaUri(dir, m.thumb)}
-                  w={m.w}
-                  h={m.h}
-                  width={width}
-                  frameRatio={frameRatio}
-                />
+                <MediaFrame dir={dir} item={m} fetch={false} width={width} frameRatio={frameRatio} />
               </Pressable>
             )}
           />

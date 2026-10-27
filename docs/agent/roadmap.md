@@ -21,12 +21,7 @@ Only work that is not built yet, plus the decisions that shape it. Built feature
 
 ### OTA
 
-- **Merge with the cloud.** «Восстановить» must merge, not just fill an empty app: local posts and cloud posts end up as the union on both sides (e.g. 2025 on the phone + 2026 in Drive). Same post id → higher `rev` wins; local-only posts get queued for upload.
-- **Restore offer on an empty diary.** Empty feed shows «Восстановить из Google Drive» (connects first if needed).
-- **Lazy originals.** Restore pulls `post.json` + thumbnails only; an original is downloaded when it is opened, shared or re-encoded.
-- **Free up space.** Settings action that deletes local originals already safe in the cloud (thumbnails stay; originals come back on demand).
-- **On this day.** Feed block with posts from the same day in earlier years.
-- **Provider interface.** Sync engine talks to a `CloudStore` interface; Google Drive is one implementation. Prepares the home-server backend.
+Nothing planned right now.
 
 ### APK
 

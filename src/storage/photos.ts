@@ -97,6 +97,7 @@ export async function storePhoto(
 
 export async function recompressPhoto(postDir: Directory, item: MediaItem, quality: PhotoQuality): Promise<MediaItem> {
   const source = new File(postDir, item.file);
+  if (!source.exists) return item;
   const next = await storePhoto(
     { uri: source.uri, width: item.w, height: item.h },
     postDir,

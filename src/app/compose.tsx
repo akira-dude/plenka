@@ -17,6 +17,7 @@ import type { PickedPhoto } from '@/storage/photos';
 import { getPost, listTags, savePost } from '@/storage/posts';
 import { getPhotoQuality, type PhotoQuality } from '@/storage/settings';
 import { syncNow } from '@/sync/engine';
+import { originalUri } from '@/sync/media';
 import { TagSuggestions } from '@/ui/TagSuggestions';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -207,6 +208,10 @@ export default function Compose() {
     setSaving(true);
     try {
       const name = place.trim();
+      const target = chosen ?? (await getPhotoQuality(db));
+      for (const m of keep) {
+        if (dir && isLowerQuality(target, mediaQuality(m))) await originalUri(db, dir, m);
+      }
       const post = await savePost(
         db,
         {
@@ -217,7 +222,7 @@ export default function Compose() {
           keep,
           add: added,
         },
-        chosen ?? (await getPhotoQuality(db)),
+        target,
         params.id,
       );
       void syncNow(db);

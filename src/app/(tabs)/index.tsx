@@ -5,13 +5,15 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
-import { monthTitle } from '@/domain/dates';
+import { dayKeyOf, monthTitle } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
-import { listFeedPage, monthCounts, type FeedPage, type IndexedPost } from '@/storage/posts';
+import { listFeedPage, listOnThisDay, monthCounts, type FeedPage, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
 import { useSyncState } from '@/sync/engine';
 import { MonthPicker } from '@/ui/MonthPicker';
+import { OnThisDay } from '@/ui/OnThisDay';
 import { PostCard } from '@/ui/PostCard';
+import { RestoreOffer } from '@/ui/RestoreOffer';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -20,7 +22,7 @@ const PAGE_SIZE = 30;
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-type FeedData = { page: FeedPage; counts: Map<string, number> };
+type FeedData = { page: FeedPage; counts: Map<string, number>; memories: IndexedPost[] };
 
 export default function Feed() {
   const styles = useStyles(makeStyles);
@@ -34,14 +36,16 @@ export default function Feed() {
   const cardWidth = width - space.gutter * 2;
   const cell = (cardWidth - GRID_GAP * 2) / 3;
 
+  const today = dayKeyOf(new Date());
   const query = useCallback(
     async (db: SQLiteDatabase): Promise<FeedData> => ({
       page: await listFeedPage(db, month, limit),
       counts: await monthCounts(db),
+      memories: month ? [] : await listOnThisDay(db, today),
     }),
-    [month, limit],
+    [month, limit, today],
   );
-  const { data } = useDbQuery<FeedData | null>(query, null);
+  const { data, reload } = useDbQuery<FeedData | null>(query, null);
   const items = useMemo(() => data?.page.items ?? [], [data]);
   const counts = useMemo(() => data?.counts ?? new Map<string, number>(), [data]);
   const total = useMemo(() => [...counts.values()].reduce((a, b) => a + b, 0), [counts]);
@@ -70,6 +74,9 @@ export default function Feed() {
     [cardWidth],
   );
 
+  const header = data?.memories.length ? (
+    <OnThisDay items={data.memories} year={Number(today.slice(0, 4))} />
+  ) : undefined;
   const footer = hasMore ? <ActivityIndicator style={styles.more} color={colors.muted} /> : undefined;
   const listKey = `${grid ? 'grid' : 'list'}-${month ?? 'all'}`;
 
@@ -131,6 +138,7 @@ export default function Feed() {
           {!month && (
             <Text style={styles.emptyText}>Нажми на камеру внизу, чтобы сделать первую запись. Всё хранится на телефоне.</Text>
           )}
+          {!month && total === 0 && <RestoreOffer onDone={reload} />}
         </View>
       ) : grid ? (
         <FlatList
@@ -143,6 +151,7 @@ export default function Feed() {
           ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
           onEndReached={loadMore}
           onEndReachedThreshold={1.5}
+          ListHeaderComponent={header}
           ListFooterComponent={footer}
           initialNumToRender={18}
           windowSize={9}
@@ -181,6 +190,7 @@ export default function Feed() {
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           onEndReached={loadMore}
           onEndReachedThreshold={1.5}
+          ListHeaderComponent={header}
           ListFooterComponent={footer}
           initialNumToRender={4}
           maxToRenderPerBatch={4}

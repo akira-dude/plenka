@@ -131,7 +131,11 @@ export function createDrive(tokens: TokenSource) {
     });
   }
 
-  return { list, findChild, children, createFolder, uploadFile, uploadText, remove, download };
+  async function downloadText(id: string): Promise<string> {
+    return (await request(`${API}/files/${id}?alt=media`)).text();
+  }
+
+  return { list, findChild, children, createFolder, uploadFile, uploadText, remove, download, downloadText };
 }
 
 export type Drive = ReturnType<typeof createDrive>;

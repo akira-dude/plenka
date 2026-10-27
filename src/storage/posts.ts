@@ -262,3 +262,12 @@ export async function rebuildIndex(db: SQLiteDatabase): Promise<number> {
   });
   return found.filter((f) => !f.post.deleted).length;
 }
+
+export async function listOnThisDay(db: SQLiteDatabase, today: string): Promise<IndexedPost[]> {
+  const rows = await db.getAllAsync<Row>(
+    `${FIELDS} AND substr(day, 6) = ? AND day < ? ORDER BY created_at DESC LIMIT 20`,
+    today.slice(5),
+    today,
+  );
+  return rows.map(toIndexed);
+}

@@ -10,7 +10,9 @@ import { rootDir } from '@/storage/paths';
 import { countPosts, rebuildIndex } from '@/storage/posts';
 import { getPhotoQuality, getWifiOnly, setPhotoQuality, setWifiOnly, type PhotoQuality } from '@/storage/settings';
 import { connect, describeAuthError, disconnect } from '@/sync/auth';
-import { refreshSyncState, resendAll, restoreFromDrive, syncNow, useSyncState } from '@/sync/engine';
+import { toLocalIso } from '@/domain/dates';
+import { mergeFromCloud, mergeSummary, refreshSyncState, resendAll, syncNow, useSyncState } from '@/sync/engine';
+import { findFreeable, freeOriginals, type Freeable } from '@/sync/media';
 import { AppUpdates } from '@/ui/AppUpdates';
 import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -42,6 +44,14 @@ async function loadOverview(db: SQLiteDatabase): Promise<Overview> {
   };
 }
 
+const FREE_AFTER_MONTHS = 3;
+
+function monthsAgo(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return toLocalIso(d);
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1).replace('.', ',')} ГБ`;
   return `${Math.round(bytes / 1024 ** 2)} МБ`;
@@ -53,6 +63,7 @@ export default function Settings() {
   const { colors, mode, setMode } = useTheme();
   const { data, reload } = useDbQuery<Overview | null>(loadOverview, null);
   const [busy, setBusy] = useState(false);
+  const [freeing, setFreeing] = useState(false);
   const sync = useSyncState();
 
   const chooseQuality = useCallback(
@@ -73,6 +84,39 @@ export default function Settings() {
       Alert.alert('Не удалось пересобрать список', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const free = (found: Freeable) => {
+    freeOriginals(found.files);
+    Alert.alert('Место освобождено', `Удалено полных фото: ${found.files.length}, это ${formatBytes(found.bytes)}.`);
+    reload();
+  };
+
+  const offerFreeSpace = async () => {
+    setFreeing(true);
+    try {
+      const [old, all] = await Promise.all([findFreeable(db, monthsAgo(FREE_AFTER_MONTHS)), findFreeable(db, null)]);
+      if (all.files.length === 0) {
+        Alert.alert(
+          'Освобождать нечего',
+          'На телефоне нет полных фото, копии которых уже лежат в Google Drive. Если записи ещё ждут отправки, дождись синхронизации.',
+        );
+        return;
+      }
+      Alert.alert(
+        'Освободить место?',
+        `С телефона удалятся полные фото, копии которых уже есть в Google Drive. Превью останутся, а полное фото скачается само, когда откроешь запись.\n\nСтарше ${FREE_AFTER_MONTHS} месяцев: ${formatBytes(old.bytes)}\nВсе: ${formatBytes(all.bytes)}`,
+        [
+          { text: 'Отмена', style: 'cancel' },
+          ...(old.files.length > 0 ? [{ text: `Старше ${FREE_AFTER_MONTHS} мес.`, onPress: () => free(old) }] : []),
+          { text: 'Все', style: 'destructive' as const, onPress: () => free(all) },
+        ],
+      );
+    } catch (e) {
+      Alert.alert('Не удалось посчитать место', e instanceof Error ? e.message : String(e));
+    } finally {
+      setFreeing(false);
     }
   };
 
@@ -126,6 +170,11 @@ export default function Settings() {
           </View>
         ) : (
           <ActivityIndicator color={colors.muted} />
+        )}
+        {sync.account && (
+          <Pressable style={styles.button} onPress={offerFreeSpace} disabled={freeing}>
+            {freeing ? <ActivityIndicator color={colors.ink} /> : <Text style={styles.buttonText}>Освободить место</Text>}
+          </Pressable>
         )}
         {!sync.account && (
           <View style={styles.warn}>
@@ -188,8 +237,8 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
 
   const onRestore = () =>
     run('restore', async () => {
-      const n = await restoreFromDrive(db, (done, total) => setBusy(`restore:${done} из ${total}`));
-      Alert.alert('Восстановление', n ? `Записей в дневнике: ${n}.` : 'В Drive не нашлось папки «Плёнка».');
+      const result = await mergeFromCloud(db, (done, total) => setBusy(`restore:${done} из ${total}`));
+      Alert.alert('Объединение с Drive', mergeSummary(result));
     });
 
   const onDisconnect = () =>
@@ -254,7 +303,7 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
       <Text style={styles.stat}>{status}</Text>
       <Text style={styles.note}>Последняя синхронизация: {formatSyncTime(sync.lastSyncAt)}</Text>
       {sync.error && <Text style={styles.error}>{sync.error}</Text>}
-      {busy?.startsWith('restore') && <Text style={styles.note}>Скачиваю из Drive: {busy.split(':')[1] ?? '…'}</Text>}
+      {busy?.startsWith('restore') && <Text style={styles.note}>Сверяю с Drive: {busy.split(':')[1] ?? '…'}</Text>}
 
       <View style={[styles.row, styles.between]}>
         <Text style={styles.optionTitle}>Только по Wi-Fi</Text>
@@ -279,12 +328,16 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
       </Pressable>
       <View style={styles.row}>
         <Pressable style={[styles.button, styles.flex]} onPress={onRestore} disabled={locked}>
-          <Text style={styles.buttonText}>Восстановить</Text>
+          <Text style={styles.buttonText}>Объединить</Text>
         </Pressable>
         <Pressable style={[styles.button, styles.flex]} onPress={onResend} disabled={locked}>
           <Text style={styles.buttonText}>Отправить всё</Text>
         </Pressable>
       </View>
+      <Text style={styles.note}>
+        «Объединить» сводит записи телефона и Drive: чего нет на телефоне, скачается (полные фото подтянутся при
+        открытии), чего нет в Drive, отправится туда.
+      </Text>
       <Pressable style={styles.textButton} onPress={onDisconnect} disabled={busy !== null}>
         <Text style={styles.danger}>Отключить Drive</Text>
       </Pressable>

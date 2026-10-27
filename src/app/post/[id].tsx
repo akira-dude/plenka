@@ -7,10 +7,12 @@ import Feather from '@expo/vector-icons/Feather';
 import { sharePhoto } from '@/device/share';
 import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
-import { mediaUri } from '@/storage/paths';
 import { deletePost, getPost } from '@/storage/posts';
+import type { MediaItem } from '@/domain/post';
 import { syncNow, syncedRev, useSyncState } from '@/sync/engine';
-import { PhotoFrame, clampRatio } from '@/ui/PhotoFrame';
+import { originalUri } from '@/sync/media';
+import { MediaFrame } from '@/ui/MediaFrame';
+import { clampRatio } from '@/ui/PhotoFrame';
 import { TagLinks } from '@/ui/TagLinks';
 import { fonts, space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -51,8 +53,10 @@ export default function PostScreen() {
       },
     ]);
 
-  const share = (uri: string) =>
-    sharePhoto(uri).catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
+  const share = (dir: string, m: MediaItem) =>
+    originalUri(db, dir, m)
+      .then(sharePhoto)
+      .catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
 
   if (!data || data.post.deleted) {
     return <Stack.Screen options={{ title: '' }} />;
@@ -80,7 +84,7 @@ export default function PostScreen() {
                   style={styles.action}
                   hitSlop={6}
                   accessibilityLabel="Поделиться фото"
-                  onPress={() => share(mediaUri(dir, post.media[Math.min(page, post.media.length - 1)].file))}
+                  onPress={() => share(dir, post.media[Math.min(page, post.media.length - 1)])}
                 >
                   <Feather name="share-2" size={18} color={colors.ink} />
                 </Pressable>
@@ -112,11 +116,10 @@ export default function PostScreen() {
               onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
               renderItem={({ item, index }) => (
                 <Pressable onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: post.id, index } })}>
-                  <PhotoFrame
-                    uri={mediaUri(dir, item.file)}
-                    blurUri={mediaUri(dir, item.thumb)}
-                    w={item.w}
-                    h={item.h}
+                  <MediaFrame
+                    dir={dir}
+                    item={item}
+                    fetch
                     width={width}
                     frameRatio={frameRatio}
                     fit="whole"

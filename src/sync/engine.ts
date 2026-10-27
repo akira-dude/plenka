@@ -1,24 +1,15 @@
 import { useSyncExternalStore } from 'react';
-import { Directory, File } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import NetInfo from '@react-native-community/netinfo';
 import { toLocalIso } from '@/domain/dates';
-import { fileOf, rootDir } from '@/storage/paths';
-import { getStored, listFeed, rebuildIndex } from '@/storage/posts';
+import { parsePost, type Post } from '@/domain/post';
+import { deleteIfExists, writeJsonAtomic } from '@/storage/files';
+import { dirOf, fileOf } from '@/storage/paths';
+import { countPosts, getStored, rebuildIndex } from '@/storage/posts';
 import { getLastSyncAt, getWifiOnly, setLastSyncAt } from '@/storage/settings';
-import { accessToken, currentAccount, dropToken, type Account } from './auth';
-import { DriveError, FOLDER_MIME, createDrive, type Drive } from './drive';
-
-const ROOT_FOLDER = 'Плёнка';
-
-const MIME: Record<string, string> = {
-  webp: 'image/webp',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  heic: 'image/heic',
-  heif: 'image/heif',
-};
+import { currentAccount, type Account } from './auth';
+import { DriveStore } from './driveStore';
+import { parentOf, type CloudStore } from './store';
 
 export type SyncState = {
   account: Account | null;
@@ -71,140 +62,24 @@ export async function refreshSyncState(db: SQLiteDatabase, account?: Account | n
   });
 }
 
-function makeDrive(): Drive {
-  return createDrive({
-    get: async () => {
-      const token = await accessToken();
-      if (!token) throw new Error('Google Drive не подключён.');
-      return token;
-    },
-    drop: dropToken,
-  });
+export async function openStore(db: SQLiteDatabase): Promise<CloudStore | null> {
+  const account = state.account ?? (await currentAccount().catch(() => null));
+  return account ? new DriveStore(db) : null;
 }
 
-const mimeOf = (path: string) => MIME[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
-const parentOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
-const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
-
-type Mapping = { drive_id: string; sha256: string | null };
-
-class Remote {
-  constructor(
-    private db: SQLiteDatabase,
-    readonly drive: Drive,
-  ) {}
-
-  mapping(path: string): Promise<Mapping | null> {
-    return this.db.getFirstAsync<Mapping>('SELECT drive_id, sha256 FROM drive_files WHERE path = ?', path);
-  }
-
-  async remember(path: string, driveId: string, sha256: string | null = null): Promise<void> {
-    await this.db.runAsync(
-      'INSERT OR REPLACE INTO drive_files (path, drive_id, sha256) VALUES (?, ?, ?)',
-      path,
-      driveId,
-      sha256,
-    );
-  }
-
-  async forgetTree(path: string): Promise<void> {
-    await this.db.runAsync(
-      'DELETE FROM drive_files WHERE path = ? OR substr(path, 1, ?) = ?',
-      path,
-      path.length + 1,
-      `${path}/`,
-    );
-  }
-
-  async rootId(create: boolean): Promise<string | null> {
-    const known = await this.mapping('');
-    if (known) return known.drive_id;
-    const found = await this.drive.findChild('root', ROOT_FOLDER, true);
-    const id = found?.id ?? (create ? await this.drive.createFolder('root', ROOT_FOLDER) : null);
-    if (id) await this.remember('', id);
-    return id;
-  }
-
-  async folderId(path: string): Promise<string> {
-    if (path === '') return (await this.rootId(true))!;
-    const known = await this.mapping(path);
-    if (known) return known.drive_id;
-    const parentId = await this.folderId(parentOf(path));
-    const found = await this.drive.findChild(parentId, nameOf(path), true);
-    const id = found?.id ?? (await this.drive.createFolder(parentId, nameOf(path)));
-    await this.remember(path, id);
-    return id;
-  }
-
-  private async existingId(path: string, parentId: string, known: Mapping | null): Promise<string | undefined> {
-    if (known) return known.drive_id;
-    return (await this.drive.findChild(parentId, nameOf(path), false))?.id;
-  }
-
-  async putFile(path: string, sha256: string | null): Promise<void> {
-    const known = await this.mapping(path);
-    if (known && (sha256 === null || known.sha256 === sha256)) return;
-    const parentId = await this.folderId(parentOf(path));
-    const id = await this.drive.uploadFile(
-      new File(rootDir(), path),
-      nameOf(path),
-      parentId,
-      mimeOf(path),
-      await this.existingId(path, parentId, known),
-    );
-    await this.remember(path, id, sha256);
-  }
-
-  async putText(path: string, text: string): Promise<void> {
-    const known = await this.mapping(path);
-    const parentId = await this.folderId(parentOf(path));
-    const id = await this.drive.uploadText(text, nameOf(path), parentId, await this.existingId(path, parentId, known));
-    await this.remember(path, id);
-  }
-
-  async lookupFolder(path: string): Promise<string | null> {
-    if (path === '') return this.rootId(false);
-    const known = await this.mapping(path);
-    if (known) return known.drive_id;
-    const parentId = await this.lookupFolder(parentOf(path));
-    if (!parentId) return null;
-    return (await this.drive.findChild(parentId, nameOf(path), true))?.id ?? null;
-  }
-
-  async removeTree(path: string): Promise<void> {
-    const id = await this.lookupFolder(path);
-    if (id) await this.drive.remove(id);
-    await this.forgetTree(path);
-  }
-
-  async removeStale(dir: string, keep: Set<string>): Promise<void> {
-    const rows = await this.db.getAllAsync<{ path: string; drive_id: string }>(
-      'SELECT path, drive_id FROM drive_files WHERE substr(path, 1, ?) IN (?, ?)',
-      dir.length + 7,
-      `${dir}/media/`,
-      `${dir}/thumbs`,
-    );
-    for (const row of rows) {
-      if (row.path.endsWith('/thumbs') || keep.has(row.path)) continue;
-      await this.drive.remove(row.drive_id);
-      await this.db.runAsync('DELETE FROM drive_files WHERE path = ?', row.path);
-    }
-  }
-}
-
-async function pushPost(db: SQLiteDatabase, remote: Remote, postId: string): Promise<void> {
+async function pushPost(db: SQLiteDatabase, store: CloudStore, postId: string): Promise<void> {
   const stored = await getStored(db, postId);
   if (!stored) return;
   const { post, dir } = stored;
   const previous = await db.getFirstAsync<{ dir: string }>('SELECT dir FROM synced_posts WHERE post_id = ?', postId);
 
   if (post.deleted) {
-    for (const d of new Set([dir, previous?.dir].filter((x): x is string => Boolean(x)))) await remote.removeTree(d);
+    for (const d of new Set([dir, previous?.dir].filter((x): x is string => Boolean(x)))) await store.removeTree(d);
     await db.runAsync('DELETE FROM synced_posts WHERE post_id = ?', postId);
     return;
   }
 
-  if (previous && previous.dir !== dir) await remote.removeTree(previous.dir);
+  if (previous && previous.dir !== dir) await store.removeTree(previous.dir);
 
   const keep = new Set<string>();
   for (const m of post.media) {
@@ -212,33 +87,27 @@ async function pushPost(db: SQLiteDatabase, remote: Remote, postId: string): Pro
     const thumb = `${dir}/${m.thumb}`;
     keep.add(media);
     keep.add(thumb);
-    await remote.putFile(media, m.sha256);
-    await remote.putFile(thumb, null);
+    await store.putFile(media, m.sha256);
+    await store.putFile(thumb, null);
   }
-  await remote.removeStale(dir, keep);
-  await remote.putText(`${dir}/post.json`, await fileOf(dir, 'post.json').text());
-  await db.runAsync(
-    'INSERT OR REPLACE INTO synced_posts (post_id, dir, rev) VALUES (?, ?, ?)',
-    postId,
-    dir,
-    post.rev,
-  );
+  await store.pruneMedia(dir, keep);
+  await store.putText(`${dir}/post.json`, await fileOf(dir, 'post.json').text());
+  await markSynced(db, store, post, dir);
 }
 
-async function resetRemote(db: SQLiteDatabase): Promise<void> {
+async function markSynced(db: SQLiteDatabase, store: CloudStore, post: Post, dir: string): Promise<void> {
+  for (const m of post.media) await store.markStored(`${dir}/${m.file}`, m.sha256);
+  await db.runAsync('INSERT OR REPLACE INTO synced_posts (post_id, dir, rev) VALUES (?, ?, ?)', post.id, dir, post.rev);
+  await db.runAsync('DELETE FROM outbox WHERE post_id = ? AND rev <= ?', post.id, post.rev);
+}
+
+async function resetRemote(db: SQLiteDatabase, store: CloudStore): Promise<void> {
   const now = toLocalIso(new Date());
+  await store.reset();
   await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM drive_files');
     await db.runAsync('DELETE FROM synced_posts');
     await db.runAsync('INSERT OR IGNORE INTO outbox (post_id, rev, queued_at) SELECT id, rev, ? FROM posts', now);
   });
-}
-
-function describe(e: unknown): string {
-  if (e instanceof DriveError && e.status === 403) {
-    return 'Google Drive отказал в доступе. Отключи и подключи Drive заново и разреши доступ к файлам приложения.';
-  }
-  return e instanceof Error ? e.message : String(e);
 }
 
 export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolean } = {}): Promise<void> {
@@ -260,17 +129,18 @@ export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolea
   );
   update({ account, running: true, waitingForWifi: false, error: null, done: 0, total: queue.length });
 
-  const remote = new Remote(db, makeDrive());
+  const store: CloudStore = new DriveStore(db);
   try {
-    await remote.rootId(true);
-    if (!(await remote.mapping('manifest.json'))) await remote.putFile('manifest.json', null);
+    await store.ensureRoot();
     for (const item of queue) {
       try {
-        await pushPost(db, remote, item.post_id);
+        await pushPost(db, store, item.post_id);
       } catch (e) {
-        if (e instanceof DriveError && e.status === 404) {
-          await resetRemote(db);
-          throw new Error('Папка «Плёнка» в Drive изменилась снаружи. Всё будет отправлено заново при следующей синхронизации.');
+        if (store.isRootGone(e)) {
+          await resetRemote(db, store);
+          throw new Error(
+            `Папка «Плёнка» в ${store.label} изменилась снаружи. Всё будет отправлено заново при следующей синхронизации.`,
+          );
         }
         throw e;
       }
@@ -279,7 +149,7 @@ export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolea
     }
     await setLastSyncAt(db, toLocalIso(new Date()));
   } catch (e) {
-    update({ error: describe(e) });
+    update({ error: store.describe(e) });
   } finally {
     update({ running: false });
     await refreshSyncState(db, account);
@@ -287,7 +157,9 @@ export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolea
 }
 
 export async function resendAll(db: SQLiteDatabase): Promise<void> {
-  await resetRemote(db);
+  const store = await openStore(db);
+  if (!store) return;
+  await resetRemote(db, store);
   await syncNow(db, { ignoreWifi: true });
 }
 
@@ -296,61 +168,94 @@ export async function syncedRev(db: SQLiteDatabase, postId: string): Promise<num
   return row?.rev ?? null;
 }
 
-type RemoteEntry = { path: string; id: string };
+export type MergeResult = { pulled: number; queued: number; total: number };
 
-async function walk(drive: Drive, folderId: string, path: string, files: RemoteEntry[], folders: RemoteEntry[]) {
-  for (const child of await drive.children(folderId)) {
-    const childPath = path ? `${path}/${child.name}` : child.name;
-    if (child.mimeType === FOLDER_MIME) {
-      folders.push({ path: childPath, id: child.id });
-      await walk(drive, child.id, childPath, files, folders);
-    } else {
-      files.push({ path: childPath, id: child.id });
-    }
+type Local = { post: Post; dir: string };
+
+async function pullPost(store: CloudStore, remote: Post, dir: string, local: Local | null): Promise<void> {
+  if (local && local.dir !== dir && dirOf(local.dir).exists) dirOf(local.dir).delete();
+  const target = dirOf(dir);
+  target.create({ intermediates: true, idempotent: true });
+  const here = local && local.dir === dir ? local.post.media : [];
+  const sameSha = new Map(here.map((m) => [m.file, m.sha256]));
+  const wanted = new Set(remote.media.flatMap((m) => [m.file, m.thumb]));
+  for (const m of here) {
+    if (!wanted.has(m.file)) deleteIfExists(fileOf(dir, m.file));
+    if (!wanted.has(m.thumb)) deleteIfExists(fileOf(dir, m.thumb));
+  }
+  for (const m of remote.media) {
+    const changed = sameSha.get(m.file) !== m.sha256;
+    if (changed) deleteIfExists(fileOf(dir, m.file));
+    const thumb = fileOf(dir, m.thumb);
+    if (changed || !thumb.exists) await store.download(`${dir}/${m.thumb}`, thumb);
+  }
+  await writeJsonAtomic(target, 'post.json', remote);
+}
+
+async function readRemotePost(store: CloudStore, path: string): Promise<Post | null> {
+  try {
+    return parsePost(JSON.parse(await store.readText(path)));
+  } catch {
+    return null;
   }
 }
 
-export async function restoreFromDrive(
+export async function mergeFromCloud(
   db: SQLiteDatabase,
   onProgress: (done: number, total: number) => void,
-): Promise<number> {
-  const remote = new Remote(db, makeDrive());
-  const rootId = await remote.rootId(false);
-  if (!rootId) return 0;
+): Promise<MergeResult | null> {
+  const store = await openStore(db);
+  if (!store) throw new Error('Облако не подключено.');
+  if (!(await store.hasRoot())) return null;
 
-  const files: RemoteEntry[] = [];
-  const folders: RemoteEntry[] = [];
-  await walk(remote.drive, rootId, '', files, folders);
-  for (const f of folders) await remote.remember(f.path, f.id);
-
+  const files = await store.listFiles();
+  const postFiles = files.filter((p) => p.startsWith('posts/') && p.endsWith('/post.json'));
+  const remoteRevs = new Map<string, number>();
+  let pulled = 0;
   let done = 0;
-  onProgress(done, files.length);
-  for (const f of files) {
-    const local = new File(rootDir(), f.path);
-    if (!local.exists) {
-      new Directory(rootDir(), parentOf(f.path)).create({ intermediates: true, idempotent: true });
-      await remote.drive.download(f.id, local);
+  onProgress(done, postFiles.length);
+
+  for (const path of postFiles) {
+    const dir = parentOf(path);
+    const remote = await readRemotePost(store, path);
+    if (remote && !remote.deleted) {
+      remoteRevs.set(remote.id, Math.max(remote.rev, remoteRevs.get(remote.id) ?? 0));
+      const local = await getStored(db, remote.id);
+      if (!local || local.post.rev < remote.rev || (local.post.rev === remote.rev && local.dir !== dir)) {
+        await pullPost(store, remote, dir, local);
+        pulled++;
+      }
+      if (!local || local.post.rev <= remote.rev) await markSynced(db, store, remote, dir);
     }
-    await remote.remember(f.path, f.id);
-    onProgress(++done, files.length);
+    onProgress(++done, postFiles.length);
   }
 
   await rebuildIndex(db);
-  const posts = await listFeed(db);
-  await db.withTransactionAsync(async () => {
-    for (const { post, dir } of posts) {
-      for (const m of post.media) {
-        await db.runAsync('UPDATE drive_files SET sha256 = ? WHERE path = ?', m.sha256, `${dir}/${m.file}`);
-      }
-      await db.runAsync(
-        'INSERT OR REPLACE INTO synced_posts (post_id, dir, rev) VALUES (?, ?, ?)',
-        post.id,
-        dir,
-        post.rev,
-      );
-      await db.runAsync('DELETE FROM outbox WHERE post_id = ? AND rev <= ?', post.id, post.rev);
-    }
-  });
+
+  const now = toLocalIso(new Date());
+  const locals = await db.getAllAsync<{ id: string; rev: number; deleted: number }>('SELECT id, rev, deleted FROM posts');
+  let queued = 0;
+  for (const p of locals) {
+    const remoteRev = remoteRevs.get(p.id);
+    const needsPush = remoteRev === undefined ? !p.deleted : p.rev > remoteRev;
+    if (!needsPush) continue;
+    await db.runAsync('DELETE FROM synced_posts WHERE post_id = ? AND rev < ?', p.id, p.rev);
+    await db.runAsync('INSERT OR IGNORE INTO outbox (post_id, rev, queued_at) VALUES (?, ?, ?)', p.id, p.rev, now);
+    queued++;
+  }
+
   await refreshSyncState(db);
-  return posts.length;
+  if (queued > 0) void syncNow(db);
+  return { pulled, queued, total: await countPosts(db) };
+}
+
+export function mergeSummary(result: MergeResult | null): string {
+  if (!result) return 'В облаке не нашлось папки «Плёнка».';
+  return [
+    `Скачано из облака: ${result.pulled}.`,
+    result.queued > 0 ? `Отправится в облако: ${result.queued}.` : '',
+    `Всего записей: ${result.total}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }

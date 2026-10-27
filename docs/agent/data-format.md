@@ -15,9 +15,10 @@ plenka/
          └─ thumbs/01.webp       640 px thumbnail
 ```
 
+On the phone a `media/*` original may be missing (after a merge from the cloud or «Освободить место»); the cloud copy is complete. Thumbnails and `post.json` are always present. Readers fall back to the thumbnail.
+
 - The folder name is derived from `createdAt` and `id` (`postDirName`). Changing the date of a post moves its folder.
 - Media numbers only grow inside a post; a removed `02` is not reused.
-- Planned for stage 2–3, not written yet: `index.html` + `feed.js` (PC viewer) in the root.
 
 ## `post.json`
 
