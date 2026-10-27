@@ -37,6 +37,17 @@
       ],
       "./plugins/withFragileUserData",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "2143c61d-bdcc-4d7f-8c50-f422984e33c1"
+      }
+    },
+    "owner": "akira-dude"
   }
 }
