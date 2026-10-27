@@ -17,3 +17,9 @@
 2. **Transfer** — zip export/import of the root folder, PC viewer `index.html` + `feed.js`.
 3. **Google Drive** — code done 2026-10-27, not tested on a device yet. Google Cloud project `Plenka` is set up by the user (consent screen published, Android + Web clients). Done: sign-in, outbox upload, deletes and moves, restore, Wi-Fi-only toggle, status in feed/post/settings. Next: background sync task, restore offer on the first-run screen, lazy download of originals.
 4. **Comfort** — search, tags list, "on this day", free up space by evicting old originals (thumbnails stay).
+
+## Open technical debt
+
+Temporary notes. When an item is resolved, delete its entry here and every pointer to it (`AGENTS.md` → «Shipping to the phone») in the same commit.
+
+- **Expo SDK patch mismatch (noted 2026-10-27).** The EAS build of 0.6.0 (versionCode 6) reported `expo-doctor` 19/20: `expo` 58.0.19 → ~58.0.20, `expo-file-system` 58.0.11 → ~58.0.12, `expo-router` 58.0.26 → ~58.0.27. The patches came out while the build was queued; the build itself is fine. Deliberately not fixed yet: `expo` and `expo-file-system` carry native code, so bumping them changes the runtime fingerprint and forces a new APK. Fix it in the next build that needs a new APK anyway: `npx expo install --fix`, then `npx expo-doctor` must show 20/20, then typecheck, lint, bundle export, `eas build`. After that, remove this entry and the pointer in `AGENTS.md`.
