@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Feather from '@expo/vector-icons/Feather';
 import { currentCoords, formatCoords, placeName, type Coords } from '@/device/location';
@@ -12,7 +13,7 @@ import { parseTags, type MediaItem } from '@/domain/post';
 import { mediaUri } from '@/storage/paths';
 import type { PickedPhoto } from '@/storage/photos';
 import { getPost, savePost } from '@/storage/posts';
-import { getPhotoQuality } from '@/storage/settings';
+import { getPhotoQuality, type PhotoQuality } from '@/storage/settings';
 import { syncNow } from '@/sync/engine';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -21,6 +22,12 @@ type Params = { id?: string; date?: string; source?: 'camera' | 'library' };
 type CoordsSource = 'post' | 'photo' | 'device';
 
 const THUMB = 76;
+
+const QUALITY_LABELS: { value: PhotoQuality; label: string; hint: string }[] = [
+  { value: 'visual', label: 'Без потерь', hint: 'Полное разрешение, примерно 1,5–3 МБ на фото.' },
+  { value: 'compact', label: 'Эконом', hint: 'До 1600 px по длинной стороне, примерно 0,3–0,5 МБ на фото.' },
+  { value: 'original', label: 'Оригинал', hint: 'Файл как снят, примерно 3–6 МБ на фото.' },
+];
 
 function initialDate(day?: string): Date {
   const now = new Date();
@@ -49,6 +56,11 @@ export default function Compose() {
   const [locating, setLocating] = useState(autoLocate);
   const [date, setDate] = useState(() => initialDate(params.date));
   const [saving, setSaving] = useState(false);
+  const [quality, setQuality] = useState<PhotoQuality | null>(null);
+
+  useEffect(() => {
+    getPhotoQuality(db).then((q) => setQuality((prev) => prev ?? q));
+  }, [db]);
   const dateFixed = useRef(Boolean(params.date) || editing);
   const coordsSource = useRef<CoordsSource | null>(null);
   const launched = useRef(false);
@@ -168,7 +180,6 @@ export default function Compose() {
     if (empty || saving) return;
     setSaving(true);
     try {
-      const quality = await getPhotoQuality(db);
       const name = place.trim();
       const post = await savePost(
         db,
@@ -180,7 +191,7 @@ export default function Compose() {
           keep,
           add: added,
         },
-        quality,
+        quality ?? (await getPhotoQuality(db)),
         params.id,
       );
       void syncNow(db);
@@ -202,8 +213,26 @@ export default function Compose() {
 
   return (
     <View style={styles.screen}>
-      <Stack.Screen options={{ title: editing ? 'Правка записи' : 'Новая запись' }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Stack.Screen
+        options={{
+          title: editing ? 'Правка записи' : 'Новая запись',
+          headerRight: () => (
+            <Pressable style={styles.headerSave} hitSlop={8} onPress={save} disabled={empty || saving}>
+              {saving ? (
+                <ActivityIndicator color={colors.accent} />
+              ) : (
+                <Text style={[styles.headerSaveText, empty && styles.saveOff]}>Сохранить</Text>
+              )}
+            </Pressable>
+          ),
+        }}
+      />
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        bottomOffset={24}
+      >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
           {keep.map((m) => (
             <Thumb
@@ -290,12 +319,30 @@ export default function Compose() {
           />
         </View>
 
+        <View style={styles.qualityBlock}>
+          <Text style={styles.label}>Качество новых фото в этой записи</Text>
+          <View style={styles.segment}>
+            {QUALITY_LABELS.map((o) => {
+              const on = quality === o.value;
+              return (
+                <Pressable key={o.value} style={[styles.segItem, on && styles.segOn]} onPress={() => setQuality(o.value)}>
+                  <Text style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.note}>
+            {QUALITY_LABELS.find((o) => o.value === quality)?.hint ?? ''}
+            {editing && keep.length > 0 ? ' Уже сохранённые фото не пересжимаются.' : ''}
+          </Text>
+        </View>
+
         <Text style={styles.note}>Запись сохраняется на телефон сразу, интернет не нужен.</Text>
 
         <Pressable style={[styles.save, (empty || saving) && styles.saveOff]} onPress={save} disabled={empty || saving}>
           {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.saveText}>Сохранить</Text>}
         </Pressable>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -364,4 +411,13 @@ const makeStyles = (c: Palette) =>
     save: { marginTop: 6, backgroundColor: c.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
     saveOff: { opacity: 0.5 },
     saveText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
+    headerSave: { paddingVertical: 8, paddingHorizontal: 4 },
+    headerSaveText: { fontSize: 16, fontWeight: '700', color: c.accent },
+    qualityBlock: { gap: 6 },
+    label: { fontSize: 12, fontWeight: '700', color: c.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
+    segment: { flexDirection: 'row', padding: 2, borderRadius: 10, backgroundColor: c.photoBg },
+    segItem: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
+    segOn: { backgroundColor: c.card },
+    segText: { fontSize: 13, fontWeight: '600', color: c.muted },
+    segTextOn: { color: c.ink },
   });

@@ -36,6 +36,7 @@ Details are read on demand: `docs/agent/INDEX.md`.
 8. **Colors only from the palette.** Styles are built as `const makeStyles = (c: Palette) => StyleSheet.create(...)` and used via `useStyles(makeStyles)`; never hardcode a color in a screen (exception: the always-black full-screen viewer).
 9. The post number (`№ N`) is not stored: it is the post's rank by `createdAt`, computed in SQL (`NUMBERED` in `posts.ts`).
 10. Sync is one-way (phone → Drive) and only reads local files; it never changes a post. After a screen saves or deletes a post it calls `syncNow(db)`; nothing else should talk to Drive.
+11. **Forms scroll above the keyboard.** Android runs edge-to-edge, so the window does not resize for the keyboard: any screen with text inputs uses `KeyboardAwareScrollView` from `react-native-keyboard-controller` (`KeyboardProvider` is in the root layout) and keeps its primary action reachable (header button).
 
 ## Expo has changed — do not trust your training data
 

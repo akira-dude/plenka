@@ -3,6 +3,7 @@ import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { initStorage } from '@/storage/posts';
 import { useAutoSync } from '@/sync/useAutoSync';
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
@@ -10,11 +11,13 @@ import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SQLiteProvider databaseName="plenka.db" onInit={initStorage}>
-        <ThemeProvider>
-          <Navigation />
-        </ThemeProvider>
-      </SQLiteProvider>
+      <KeyboardProvider>
+        <SQLiteProvider databaseName="plenka.db" onInit={initStorage}>
+          <ThemeProvider>
+            <Navigation />
+          </ThemeProvider>
+        </SQLiteProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

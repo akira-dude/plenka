@@ -62,7 +62,7 @@ src/app (routes, screens)
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
 | Search | `src/app/(tabs)/search.tsx` | Text / tag / place search over the `search` column |
 | Settings | `src/app/(tabs)/settings.tsx` | Drive status (placeholder), theme, photo quality, storage usage, rebuild index |
-| Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately) |
+| Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately). Per-post photo quality switch (defaults to the setting, applies to photos added in this session only). `KeyboardAwareScrollView` + «Сохранить» in the header so the keyboard never hides the action |
 | Post | `src/app/post/[id].tsx` | Pager, text, tags, place link → map; header: edit, delete (red) |
 | Viewer | `src/app/viewer/[id].tsx` | Full-screen black pager with zoom, param `index` |
 | Map | `src/app/map.tsx` | WebView with Leaflet (unpkg) and OpenStreetMap tiles, needs internet. The WebView `baseUrl` is the GitHub Pages site so OSM gets a Referer (without it OSM returns "Access blocked"; CARTO basemaps now need an API key); dark theme inverts the tile layer with a CSS filter; param `focus` = post id; popup button posts the id back |
