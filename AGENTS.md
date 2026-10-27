@@ -57,7 +57,7 @@ npm run doctor               # expo-doctor
 npx expo export --platform android --output-dir <tmp>   # bundle check without a device
 npm run android              # dev build on a connected phone (needs Android SDK + JDK)
 npx eas-cli@latest build -p android --profile preview   # cloud APK for installing on the phone
-npx eas-cli@latest update --channel preview --message "<what changed>" --non-interactive   # over-the-air update
+npx eas-cli@latest update --channel preview --environment preview --platform android --message "<what changed>" --non-interactive   # over-the-air update
 ```
 
 **Shipping to the phone.** JS/TS-only changes (screens, logic, styles, texts) go out with `eas update` on channel `preview`; the app downloads them on launch and applies them on the next start (or via Settings → «Перезапустить и обновить»). A new APK (`eas build`) is required when the native side changes: a new or upgraded package with native code, `app.json` / config plugin changes (permissions, icon, plugins), or an Expo SDK upgrade. `runtimeVersion` uses the `fingerprint` policy, so an update built against a different native fingerprint is simply not offered to older APKs. When unsure, compare `npx expo-updates fingerprint:generate --platform android` before and after, or just build an APK. Tell the user which of the two they need. Before any new APK build check [roadmap → Open technical debt](docs/agent/roadmap.md#open-technical-debt): pending dependency fixes go into that build.
