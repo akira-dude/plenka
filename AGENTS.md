@@ -21,6 +21,7 @@ Details are read on demand: `docs/agent/INDEX.md`.
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |
 | `docs/agent/` | Architecture, data format contract, roadmap |
+| `docs/index.html`, `docs/privacy.html`, `docs/site.css` | Public GitHub Pages site (`https://akira-dude.github.io/plenka/`): home page and privacy policy required by the Google OAuth consent screen. Update the privacy policy when the app starts collecting or sending new data |
 
 ## Hard rules
 

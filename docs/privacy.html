@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Плёнка — политика конфиденциальности</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow"><a href="./">Плёнка</a> · редакция от 27 октября 2026</p>
+  <h1>Политика конфиденциальности</h1>
+  <p class="lede">Плёнка — личный фотодневник. Приложение не передаёт ваши записи разработчику и не продаёт и не показывает их никому.</p>
+
+  <h2>Какие данные обрабатываются</h2>
+  <ul>
+    <li><b>Записи:</b> фотографии, текст, теги, дата и время.</li>
+    <li><b>Место:</b> координаты из GPS телефона или из данных снимка (EXIF) и название места. Геолокация запрашивается только пока приложение открыто.</li>
+    <li><b>Камера:</b> используется только для съёмки фото в запись.</li>
+  </ul>
+
+  <h2>Где хранятся данные</h2>
+  <ul>
+    <li><b>На телефоне</b> — во внутренней папке приложения. Другие приложения и галерея их не видят.</li>
+    <li><b>В вашем Google Drive</b> — если вы подключили синхронизацию. Копии записей сохраняются в папку «Плёнка» в вашем собственном аккаунте.</li>
+  </ul>
+
+  <h2>Доступ к Google Drive</h2>
+  <p>Приложение запрашивает только доступ <code>https://www.googleapis.com/auth/drive.file</code>. Это файлы, которые создало само приложение. Остальные файлы на вашем Drive приложению недоступны. Данные из Google API используются только для резервной копии и восстановления дневника и никому не передаются.</p>
+  <p>Use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>Сторонние сервисы</h2>
+  <ul>
+    <li><b>Карта записей:</b> подложка карты загружается с серверов CARTO и OpenStreetMap, библиотека карт — с unpkg.com. Эти сервисы видят ваш IP-адрес и показываемый участок карты, но не тексты и фото записей.</li>
+    <li><b>Название места:</b> чтобы превратить координаты в адрес, используется системный геокодер Android, который отправляет координаты поставщику геосервисов телефона.</li>
+    <li>Аналитики, рекламы и трекеров в приложении нет.</li>
+  </ul>
+
+  <h2>Удаление данных</h2>
+  <p>Запись удаляется в самом приложении. Все данные на телефоне удаляются вместе с приложением. Копию в Google Drive можно удалить, удалив папку «Плёнка», а доступ приложения отозвать на странице <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+
+  <h2>Связь</h2>
+  <p>Вопросы по этой политике можно задать через <a href="https://github.com/akira-dude/plenka/issues">GitHub Issues</a>.</p>
+
+  <hr>
+
+  <h2 lang="en">Summary in English</h2>
+  <p lang="en">Plenka is a personal offline photo diary for Android. Posts (photos, text, tags, date, location) are stored on the device and, if the user connects it, backed up to the user's own Google Drive using only the <code>drive.file</code> scope. No data is sent to the developer or sold or shared with third parties. There are no ads, analytics or trackers. The map screen loads tiles from CARTO/OpenStreetMap and the map library from unpkg.com. Use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Data can be deleted in the app, by uninstalling it, by deleting the "Плёнка" folder in Google Drive, and access can be revoked at myaccount.google.com/permissions.</p>
+</main>
+</body>
+</html>
