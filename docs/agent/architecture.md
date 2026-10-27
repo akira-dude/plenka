@@ -57,7 +57,7 @@ src/app (routes, screens)
 
 | Route | File | Notes |
 | --- | --- | --- |
-| Feed | `src/app/(tabs)/index.tsx` | Sticky month sections, month chips ("Все" + each month) that filter list and grid, list / grid toggle, sync pill, map button |
+| Feed | `src/app/(tabs)/index.tsx` | Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
 | Search | `src/app/(tabs)/search.tsx` | Text / tag / place search over the `search` column |

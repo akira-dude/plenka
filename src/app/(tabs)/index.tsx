@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, SectionList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, SectionList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -9,6 +9,7 @@ import { useDbQuery } from '@/hooks/useDbQuery';
 import { listFeed, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
 import { useSyncState } from '@/sync/engine';
+import { MonthPicker } from '@/ui/MonthPicker';
 import { PostCard } from '@/ui/PostCard';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -24,6 +25,7 @@ export default function Feed() {
   const { data } = useDbQuery(listFeed, []);
   const [grid, setGrid] = useState(false);
   const [month, setMonth] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const sync = useSyncState();
   const cardWidth = width - space.gutter * 2;
   const cell = (cardWidth - GRID_GAP * 2) / 3;
@@ -37,7 +39,8 @@ export default function Feed() {
     return [...byMonth].map(([key, items]) => ({ key, data: items }));
   }, [data]);
 
-  const activeMonth = month && allSections.some((s) => s.key === month) ? month : null;
+  const counts = useMemo(() => new Map(allSections.map((s) => [s.key, s.data.length])), [allSections]);
+  const activeMonth = month && counts.has(month) ? month : null;
   const sections = activeMonth ? allSections.filter((s) => s.key === activeMonth) : allSections;
   const visible = useMemo(() => sections.flatMap((s) => s.data), [sections]);
 
@@ -73,28 +76,28 @@ export default function Feed() {
         })}
       </View>
       {allSections.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.months}
-          contentContainerStyle={styles.monthsContent}
-        >
-          {[{ key: null as string | null, label: 'Все', count: data.length }, ...allSections.map((s) => ({
-            key: s.key as string | null,
-            label: capitalize(monthTitle(s.key)),
-            count: s.data.length,
-          }))].map((chip) => {
-            const on = chip.key === activeMonth;
-            return (
-              <Pressable key={chip.key ?? 'all'} style={[styles.chip, on && styles.chipOn]} onPress={() => setMonth(chip.key)}>
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                  {chip.label} · {chip.count}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <View style={styles.filterRow}>
+          <Pressable style={[styles.select, activeMonth && styles.selectOn]} onPress={() => setPicking(true)}>
+            <Feather name="calendar" size={15} color={activeMonth ? colors.accent : colors.muted} />
+            <Text style={[styles.selectText, activeMonth && styles.selectTextOn]} numberOfLines={1}>
+              {activeMonth ? capitalize(monthTitle(activeMonth)) : 'Все месяцы'} · {visible.length}
+            </Text>
+            <Feather name="chevron-down" size={16} color={activeMonth ? colors.accent : colors.muted} />
+          </Pressable>
+          {activeMonth && (
+            <Pressable style={styles.clear} hitSlop={8} accessibilityLabel="Показать все месяцы" onPress={() => setMonth(null)}>
+              <Feather name="x" size={18} color={colors.muted} />
+            </Pressable>
+          )}
+        </View>
       )}
+      <MonthPicker
+        visible={picking}
+        value={activeMonth}
+        counts={counts}
+        onSelect={setMonth}
+        onClose={() => setPicking(false)}
+      />
 
       {data.length === 0 ? (
         <View style={styles.empty}>
@@ -181,12 +184,23 @@ const makeStyles = (c: Palette) =>
     segTextOn: { color: c.ink },
     list: { paddingHorizontal: space.gutter, paddingTop: 8, paddingBottom: 24 },
     month: { fontSize: 18, fontWeight: '800', color: c.ink, paddingTop: 14, paddingBottom: 10, backgroundColor: c.bg },
-    months: { flexGrow: 0, marginTop: 8 },
-    monthsContent: { paddingHorizontal: space.gutter, gap: 6 },
-    chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, borderWidth: 1, borderColor: c.line, backgroundColor: c.card },
-    chipOn: { backgroundColor: c.ink, borderColor: c.ink },
-    chipText: { fontSize: 13, fontWeight: '600', color: c.muted },
-    chipTextOn: { color: c.bg },
+    filterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.gutter, marginTop: 8 },
+    select: {
+      flexShrink: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.line,
+      backgroundColor: c.card,
+    },
+    selectOn: { borderColor: c.accent, backgroundColor: c.accentSoft },
+    selectText: { flexShrink: 1, fontSize: 14, fontWeight: '600', color: c.ink },
+    selectTextOn: { color: c.accent },
+    clear: { padding: 8 },
     fill: { width: '100%', height: '100%' },
     textTile: { backgroundColor: c.card, padding: 8 },
     textTileText: { fontSize: 11, color: c.ink },
