@@ -1,25 +1,42 @@
 {
   "expo": {
-    "name": "plenka",
+    "name": "Плёнка",
     "slug": "plenka",
-    "version": "1.0.0",
+    "scheme": "plenka",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
+    "platforms": [
+      "android"
+    ],
     "android": {
+      "package": "dev.akiradude.plenka",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-image",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Плёнке нужна камера, чтобы снимать фото для записей.",
+          "microphonePermission": false
+        }
+      ],
+      "./plugins/withFragileUserData",
+      "expo-font"
+    ]
   }
 }
