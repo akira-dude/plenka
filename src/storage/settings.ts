@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ThemeMode } from '@/ui/theme';
 
-export type PhotoQuality = 'visual' | 'original';
+export type PhotoQuality = 'visual' | 'compact' | 'original';
 
 async function get(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', key);
@@ -13,7 +13,8 @@ async function set(db: SQLiteDatabase, key: string, value: string): Promise<void
 }
 
 export async function getPhotoQuality(db: SQLiteDatabase): Promise<PhotoQuality> {
-  return (await get(db, 'photoQuality')) === 'original' ? 'original' : 'visual';
+  const value = await get(db, 'photoQuality');
+  return value === 'original' || value === 'compact' ? value : 'visual';
 }
 
 export async function setPhotoQuality(db: SQLiteDatabase, quality: PhotoQuality): Promise<void> {

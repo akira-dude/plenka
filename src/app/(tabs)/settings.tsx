@@ -15,7 +15,12 @@ import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const QUALITY_OPTIONS: { value: PhotoQuality; title: string; hint: string }[] = [
-  { value: 'visual', title: 'Без видимых потерь', hint: 'WebP 90, полное разрешение, пропорции как у снимка. Примерно 1–2 МБ на фото.' },
+  { value: 'visual', title: 'Без видимых потерь', hint: 'WebP 90, полное разрешение, пропорции как у снимка. Примерно 1,5–3 МБ на фото.' },
+  {
+    value: 'compact',
+    title: 'Экономия места',
+    hint: 'WebP 85, длинная сторона до 1600 px, пропорции сохраняются. Примерно 0,3–0,5 МБ на фото: для экрана телефона и компьютера хватает, для печати и сильного зума нет.',
+  },
   { value: 'original', title: 'Оригинал', hint: 'Файл сохраняется как снят, байт в байт. Примерно 3–6 МБ на фото.' },
 ];
 

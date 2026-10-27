@@ -41,7 +41,7 @@ src/app (routes, screens)
 ## Photos (`src/storage/photos.ts`)
 
 - Source: `expo-image-picker` (system camera intent or Android Photo Picker). Captured photos land in the app cache, not in the gallery; picked ones are copies. No storage permission is needed on Android 13+.
-- Quality modes (`settings.ts` → `PhotoQuality`): `visual` = WebP 0.9 at full resolution after EXIF orientation is applied; `original` = byte-for-byte copy.
+- Quality modes (`settings.ts` → `PhotoQuality`): `visual` = WebP 0.9 at full resolution after EXIF orientation is applied; `compact` = WebP 0.85 with the long side scaled down to 1600 px (aspect kept, smaller photos untouched); `original` = byte-for-byte copy. `w`/`h` in `post.json` are the stored dimensions.
 - Thumbnail: WebP 0.8, longest side 640 px, used for grid, calendar, blur backgrounds.
 - `sha256` of the stored file goes into `post.json` (dedup key for upload later).
 - EXIF date/GPS are read in the editor (`parseExifDate`, `parseExifGps`) to prefill the post; they are not copied into the WebP.
