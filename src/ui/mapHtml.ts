@@ -3,10 +3,9 @@ import type { Palette, Scheme } from './theme';
 export type MapPoint = { id: string; lat: number; lon: number; title: string; text: string };
 
 const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/dist';
-const TILES: Record<Scheme, string> = {
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-};
+const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+export const MAP_BASE_URL = 'https://akira-dude.github.io/plenka/';
+const DARK_TILES = '.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9); }';
 
 const toScript = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c');
 
@@ -23,6 +22,7 @@ export function buildMapHtml(points: MapPoint[], focus: string | null, scheme: S
   .pop b { display: block; font-family: monospace; font-size: 12px; color: ${c.muted}; margin-bottom: 4px; }
   .pop p { margin: 0 0 8px; font-size: 14px; }
   .pop button { border: 0; border-radius: 8px; padding: 6px 10px; background: ${c.accent}; color: ${c.onAccent}; font-size: 13px; }
+  ${scheme === 'dark' ? DARK_TILES : ''}
 </style>
 </head><body>
 <div id="map"></div>
@@ -36,9 +36,9 @@ export function buildMapHtml(points: MapPoint[], focus: string | null, scheme: S
     document.getElementById('map').innerHTML = '<div class="offline">Для карты нужен интернет: подложка и библиотека карт загружаются из сети.</div>';
   } else {
     const map = L.map('map', { zoomControl: false, worldCopyJump: true });
-    L.tileLayer(${toScript(TILES[scheme])}, {
+    L.tileLayer(${toScript(TILES)}, {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap, &copy; CARTO',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     const markers = {};
     for (const p of points) {

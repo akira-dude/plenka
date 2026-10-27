@@ -50,14 +50,14 @@ src/app (routes, screens)
 
 - `PhotoFrame`: feed frame ratio is clamped to 3:4…16:9. In the feed (`fit="cover"`) a photo outside that range fills the frame and is cropped along its long side, display only. Never crop the file.
 - Post view (`fit="whole"`): frame ratio comes from the first photo, clamped so it takes at most ~72% of the screen height; other photos are shown whole over a blurred copy of their thumbnail. Tap opens the full-screen viewer.
-- Viewer (`ZoomableImage`): pinch 1–5x, pan when zoomed, double tap 2.5x / reset; react-native-gesture-handler v3 hooks with `runOnJS: true`.
+- Viewer (`ZoomableImage`): pinch 1–5x, pan when zoomed, double tap 2.5x / reset, vertical swipe down when not zoomed closes the viewer (horizontal moves fail the pan so the pager scrolls); react-native-gesture-handler v3 hooks with `runOnJS: true`.
 - Grid and calendar use square-cropped thumbnails only.
 
 ## Screens
 
 | Route | File | Notes |
 | --- | --- | --- |
-| Feed | `src/app/(tabs)/index.tsx` | Sections by month, list / grid toggle, map button |
+| Feed | `src/app/(tabs)/index.tsx` | Sticky month sections, month chips ("Все" + each month) that filter list and grid, list / grid toggle, sync pill, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
 | Search | `src/app/(tabs)/search.tsx` | Text / tag / place search over the `search` column |
@@ -65,7 +65,7 @@ src/app (routes, screens)
 | Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately) |
 | Post | `src/app/post/[id].tsx` | Pager, text, tags, place link → map; header: edit, delete (red) |
 | Viewer | `src/app/viewer/[id].tsx` | Full-screen black pager with zoom, param `index` |
-| Map | `src/app/map.tsx` | WebView with Leaflet (unpkg) and CARTO tiles, needs internet; param `focus` = post id; popup button posts the id back |
+| Map | `src/app/map.tsx` | WebView with Leaflet (unpkg) and OpenStreetMap tiles, needs internet. The WebView `baseUrl` is the GitHub Pages site so OSM gets a Referer (without it OSM returns "Access blocked"; CARTO basemaps now need an API key); dark theme inverts the tile layer with a CSS filter; param `focus` = post id; popup button posts the id back |
 
 Screens reload their data on focus via `useDbQuery`; there is no global store.
 

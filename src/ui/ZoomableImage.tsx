@@ -12,10 +12,19 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 
 const MAX_SCALE = 5;
 const DOUBLE_TAP_SCALE = 2.5;
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 900;
+const DIRECTION_SLOP: [number, number] = [-12, 12];
 
-type Props = { uri: string; width: number; height: number; onZoomChange: (zoomed: boolean) => void };
+type Props = {
+  uri: string;
+  width: number;
+  height: number;
+  onZoomChange: (zoomed: boolean) => void;
+  onDismiss: () => void;
+};
 
-export function ZoomableImage({ uri, width, height, onZoomChange }: Props) {
+export function ZoomableImage({ uri, width, height, onZoomChange, onDismiss }: Props) {
   const [zoomed, setZoomed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -23,6 +32,7 @@ export function ZoomableImage({ uri, width, height, onZoomChange }: Props) {
   const y = useSharedValue(0);
   const savedX = useSharedValue(0);
   const savedY = useSharedValue(0);
+  const drag = useSharedValue(0);
 
   const clampOffset = (value: number, size: number, s: number) => {
     const limit = (size * (s - 1)) / 2;
@@ -76,6 +86,20 @@ export function ZoomableImage({ uri, width, height, onZoomChange }: Props) {
     },
   });
 
+  const dismissPan = usePanGesture({
+    runOnJS: true,
+    enabled: !zoomed,
+    activeOffsetY: DIRECTION_SLOP,
+    failOffsetX: DIRECTION_SLOP,
+    onUpdate: (e) => {
+      drag.value = Math.max(0, e.translationY);
+    },
+    onDeactivate: (e) => {
+      if (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY) onDismiss();
+      else drag.value = withTiming(0);
+    },
+  });
+
   const doubleTap = useTapGesture({
     runOnJS: true,
     numberOfTaps: 2,
@@ -90,10 +114,15 @@ export function ZoomableImage({ uri, width, height, onZoomChange }: Props) {
     },
   });
 
-  const gesture = useSimultaneousGestures(pinch, pan, doubleTap);
+  const gesture = useSimultaneousGestures(pinch, pan, dismissPan, doubleTap);
 
   const animated = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }],
+    opacity: 1 - Math.min(drag.value / 600, 0.5),
+    transform: [
+      { translateX: x.value },
+      { translateY: y.value + drag.value },
+      { scale: scale.value * (1 - Math.min(drag.value / 2000, 0.15)) },
+    ],
   }));
 
   return (

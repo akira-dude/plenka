@@ -5,7 +5,7 @@ import { WebView } from 'react-native-webview';
 import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { listWithCoords } from '@/storage/posts';
-import { buildMapHtml, type MapPoint } from '@/ui/mapHtml';
+import { MAP_BASE_URL, buildMapHtml, type MapPoint } from '@/ui/mapHtml';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -42,7 +42,7 @@ export default function MapScreen() {
       <WebView
         style={styles.map}
         originWhitelist={['*']}
-        source={{ html }}
+        source={{ html, baseUrl: MAP_BASE_URL }}
         onMessage={(e) => router.push(`/post/${e.nativeEvent.data}`)}
       />
       {points.length === 0 && (

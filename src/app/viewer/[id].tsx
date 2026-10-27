@@ -39,7 +39,13 @@ export default function Viewer() {
           keyExtractor={(m) => m.file}
           onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
           renderItem={({ item }) => (
-            <ZoomableImage uri={mediaUri(data.dir, item.file)} width={width} height={height} onZoomChange={setZoomed} />
+            <ZoomableImage
+              uri={mediaUri(data.dir, item.file)}
+              width={width}
+              height={height}
+              onZoomChange={setZoomed}
+              onDismiss={() => router.back()}
+            />
           )}
         />
       )}

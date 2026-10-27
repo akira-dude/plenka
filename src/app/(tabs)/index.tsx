@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, SectionList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, ScrollView, SectionList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -23,11 +23,12 @@ export default function Feed() {
   const { width } = useWindowDimensions();
   const { data } = useDbQuery(listFeed, []);
   const [grid, setGrid] = useState(false);
+  const [month, setMonth] = useState<string | null>(null);
   const sync = useSyncState();
   const cardWidth = width - space.gutter * 2;
   const cell = (cardWidth - GRID_GAP * 2) / 3;
 
-  const sections = useMemo(() => {
+  const allSections = useMemo(() => {
     const byMonth = new Map<string, IndexedPost[]>();
     for (const item of data) {
       const key = item.post.createdAt.slice(0, 7);
@@ -35,6 +36,10 @@ export default function Feed() {
     }
     return [...byMonth].map(([key, items]) => ({ key, data: items }));
   }, [data]);
+
+  const activeMonth = month && allSections.some((s) => s.key === month) ? month : null;
+  const sections = activeMonth ? allSections.filter((s) => s.key === activeMonth) : allSections;
+  const visible = useMemo(() => sections.flatMap((s) => s.data), [sections]);
 
   const renderCard = useCallback(
     ({ item }: { item: IndexedPost }) => <PostCard item={item} width={cardWidth} />,
@@ -67,6 +72,29 @@ export default function Feed() {
           );
         })}
       </View>
+      {allSections.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.months}
+          contentContainerStyle={styles.monthsContent}
+        >
+          {[{ key: null as string | null, label: 'Все', count: data.length }, ...allSections.map((s) => ({
+            key: s.key as string | null,
+            label: capitalize(monthTitle(s.key)),
+            count: s.data.length,
+          }))].map((chip) => {
+            const on = chip.key === activeMonth;
+            return (
+              <Pressable key={chip.key ?? 'all'} style={[styles.chip, on && styles.chipOn]} onPress={() => setMonth(chip.key)}>
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                  {chip.label} · {chip.count}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {data.length === 0 ? (
         <View style={styles.empty}>
@@ -76,7 +104,7 @@ export default function Feed() {
       ) : grid ? (
         <FlatList
           key="grid"
-          data={data}
+          data={visible}
           numColumns={3}
           keyExtractor={(item) => item.post.id}
           contentContainerStyle={styles.list}
@@ -105,7 +133,7 @@ export default function Feed() {
           sections={sections}
           keyExtractor={(item) => item.post.id}
           contentContainerStyle={styles.list}
-          stickySectionHeadersEnabled={false}
+          stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => <Text style={styles.month}>{capitalize(monthTitle(section.key))}</Text>}
           renderItem={renderCard}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
@@ -152,7 +180,13 @@ const makeStyles = (c: Palette) =>
     segText: { fontSize: 13, fontWeight: '600', color: c.muted },
     segTextOn: { color: c.ink },
     list: { paddingHorizontal: space.gutter, paddingTop: 8, paddingBottom: 24 },
-    month: { fontSize: 18, fontWeight: '800', color: c.ink, paddingTop: 14, paddingBottom: 10 },
+    month: { fontSize: 18, fontWeight: '800', color: c.ink, paddingTop: 14, paddingBottom: 10, backgroundColor: c.bg },
+    months: { flexGrow: 0, marginTop: 8 },
+    monthsContent: { paddingHorizontal: space.gutter, gap: 6 },
+    chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, borderWidth: 1, borderColor: c.line, backgroundColor: c.card },
+    chipOn: { backgroundColor: c.ink, borderColor: c.ink },
+    chipText: { fontSize: 13, fontWeight: '600', color: c.muted },
+    chipTextOn: { color: c.bg },
     fill: { width: '100%', height: '100%' },
     textTile: { backgroundColor: c.card, padding: 8 },
     textTileText: { fontSize: 11, color: c.ink },

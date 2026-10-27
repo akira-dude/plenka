@@ -59,7 +59,7 @@ npx eas-cli@latest build -p android --profile preview   # cloud APK for installi
 
 EAS project `@akira-dude/plenka` (id in `app.json` → `extra.eas.projectId`), profiles in `eas.json`: `preview` = installable APK, `production` = Play bundle. `versionCode` is managed remotely by EAS (`appVersionSource: remote`). The signing keystore lives on Expo servers; every update must be signed with it or it will not install over the old app (`eas credentials` to download a backup).
 
-Run typecheck and lint before calling a task done. `android/` is generated (CNG) and git-ignored: configure native things in `app.json` or `plugins/`, never by hand. Native modules need a dev build, not Expo Go.
+Run typecheck, lint and the bundle export before calling a task done: the export runs the Babel worklets plugin and catches errors tsc and lint miss (for example a spread inside a gesture hook config). `android/` is generated (CNG) and git-ignored: configure native things in `app.json` or `plugins/`, never by hand. Native modules need a dev build, not Expo Go.
 
 ## Keep docs current
 
