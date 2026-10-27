@@ -171,13 +171,13 @@ class Remote {
     return (await this.drive.findChild(parentId, nameOf(path), true))?.id ?? null;
   }
 
-  async trashTree(path: string): Promise<void> {
+  async removeTree(path: string): Promise<void> {
     const id = await this.lookupFolder(path);
-    if (id) await this.drive.trash(id);
+    if (id) await this.drive.remove(id);
     await this.forgetTree(path);
   }
 
-  async trashStale(dir: string, keep: Set<string>): Promise<void> {
+  async removeStale(dir: string, keep: Set<string>): Promise<void> {
     const rows = await this.db.getAllAsync<{ path: string; drive_id: string }>(
       'SELECT path, drive_id FROM drive_files WHERE substr(path, 1, ?) IN (?, ?)',
       dir.length + 7,
@@ -186,7 +186,7 @@ class Remote {
     );
     for (const row of rows) {
       if (row.path.endsWith('/thumbs') || keep.has(row.path)) continue;
-      await this.drive.trash(row.drive_id);
+      await this.drive.remove(row.drive_id);
       await this.db.runAsync('DELETE FROM drive_files WHERE path = ?', row.path);
     }
   }
@@ -199,12 +199,12 @@ async function pushPost(db: SQLiteDatabase, remote: Remote, postId: string): Pro
   const previous = await db.getFirstAsync<{ dir: string }>('SELECT dir FROM synced_posts WHERE post_id = ?', postId);
 
   if (post.deleted) {
-    for (const d of new Set([dir, previous?.dir].filter((x): x is string => Boolean(x)))) await remote.trashTree(d);
+    for (const d of new Set([dir, previous?.dir].filter((x): x is string => Boolean(x)))) await remote.removeTree(d);
     await db.runAsync('DELETE FROM synced_posts WHERE post_id = ?', postId);
     return;
   }
 
-  if (previous && previous.dir !== dir) await remote.trashTree(previous.dir);
+  if (previous && previous.dir !== dir) await remote.removeTree(previous.dir);
 
   const keep = new Set<string>();
   for (const m of post.media) {
@@ -215,7 +215,7 @@ async function pushPost(db: SQLiteDatabase, remote: Remote, postId: string): Pro
     await remote.putFile(media, m.sha256);
     await remote.putFile(thumb, null);
   }
-  await remote.trashStale(dir, keep);
+  await remote.removeStale(dir, keep);
   await remote.putText(`${dir}/post.json`, await fileOf(dir, 'post.json').text());
   await db.runAsync(
     'INSERT OR REPLACE INTO synced_posts (post_id, dir, rev) VALUES (?, ?, ?)',

@@ -12,8 +12,6 @@ import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const DEBOUNCE_MS = 200;
-const CLOUD_MIN = 14;
-const CLOUD_MAX = 24;
 
 export default function Search() {
   const db = useSQLiteContext();
@@ -26,7 +24,6 @@ export default function Search() {
   const tag = tagQuery(query);
   const words = useMemo(() => searchWords(query), [query]);
   const suggestions = query.trim() && !tag ? suggestTags(tags, query) : [];
-  const maxCount = tags[0]?.count ?? 1;
 
   useEffect(() => {
     let alive = true;
@@ -83,15 +80,12 @@ export default function Search() {
             <Text style={styles.none}>Тегов пока нет. Добавь их к записям, и здесь появится облако тегов.</Text>
           ) : (
             <View style={styles.cloud}>
-              {tags.map(({ tag: t, count }) => {
-                const size = CLOUD_MIN + ((CLOUD_MAX - CLOUD_MIN) * (count - 1)) / Math.max(1, maxCount - 1);
-                return (
-                  <Pressable key={t} style={styles.cloudTag} onPress={() => pickTag(t)}>
-                    <Text style={[styles.cloudText, { fontSize: size, lineHeight: size * 1.3 }]}>#{t}</Text>
-                    <Text style={styles.cloudCount}>{count}</Text>
-                  </Pressable>
-                );
-              })}
+              {tags.map(({ tag: t, count }) => (
+                <Pressable key={t} style={styles.cloudTag} onPress={() => pickTag(t)}>
+                  <Text style={styles.cloudText}>#{t}</Text>
+                  <Text style={styles.cloudCount}>{count}</Text>
+                </Pressable>
+              ))}
             </View>
           )}
         </ScrollView>
@@ -120,8 +114,16 @@ const makeStyles = (c: Palette) =>
     mode: { fontSize: 13, color: c.muted },
     list: { padding: space.gutter, paddingBottom: 32 },
     none: { fontSize: 14, color: c.muted, lineHeight: 20 },
-    cloud: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 },
-    cloudTag: { flexDirection: 'row', alignItems: 'baseline', gap: 3, paddingVertical: 4 },
-    cloudText: { color: c.accent, fontWeight: '700' },
-    cloudCount: { fontSize: 11, color: c.muted },
+    cloud: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    cloudTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 99,
+      backgroundColor: c.accentSoft,
+    },
+    cloudText: { fontSize: 14, lineHeight: 18, fontWeight: '600', color: c.accent },
+    cloudCount: { fontSize: 12, lineHeight: 18, fontWeight: '700', color: c.accent, opacity: 0.6 },
   });

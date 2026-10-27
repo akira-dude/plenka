@@ -116,13 +116,9 @@ export function createDrive(tokens: TokenSource) {
     return ((await res.json()) as { id: string }).id;
   }
 
-  async function trash(id: string): Promise<void> {
+  async function remove(id: string): Promise<void> {
     try {
-      await request(`${API}/files/${id}?fields=id`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-        body: JSON.stringify({ trashed: true }),
-      });
+      await request(`${API}/files/${id}`, { method: 'DELETE' });
     } catch (e) {
       if (!(e instanceof DriveError && e.status === 404)) throw e;
     }
@@ -135,7 +131,7 @@ export function createDrive(tokens: TokenSource) {
     });
   }
 
-  return { list, findChild, children, createFolder, uploadFile, uploadText, trash, download };
+  return { list, findChild, children, createFolder, uploadFile, uploadText, remove, download };
 }
 
 export type Drive = ReturnType<typeof createDrive>;
