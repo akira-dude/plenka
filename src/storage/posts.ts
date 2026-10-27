@@ -9,7 +9,7 @@ import { dirOf, postDirName, postsDir, rootDir } from './paths';
 import { nextMediaNumber, storePhoto, type PickedPhoto } from './photos';
 import type { PhotoQuality } from './settings';
 
-export type IndexedPost = { post: Post; dir: string };
+export type IndexedPost = { post: Post; dir: string; frame: number };
 
 export type Draft = {
   createdAt: Date;
@@ -20,9 +20,15 @@ export type Draft = {
   add: PickedPhoto[];
 };
 
-type Row = { json: string; dir: string };
+type Row = { json: string; dir: string; frame: number };
 
-const toIndexed = (row: Row): IndexedPost => ({ post: JSON.parse(row.json) as Post, dir: row.dir });
+const toIndexed = (row: Row): IndexedPost => ({ post: JSON.parse(row.json) as Post, dir: row.dir, frame: row.frame });
+
+const NUMBERED = `(
+  SELECT json, dir, day, created_at, id, search,
+    ROW_NUMBER() OVER (ORDER BY created_at, id) AS frame
+  FROM posts WHERE deleted = 0
+)`;
 
 export async function initStorage(db: SQLiteDatabase): Promise<void> {
   await migrate(db);
@@ -32,18 +38,20 @@ export async function initStorage(db: SQLiteDatabase): Promise<void> {
   if (!manifest.exists) {
     await writeJsonAtomic(root, 'manifest.json', { format: POST_FORMAT, app: 'plenka', createdAt: toLocalIso(new Date()) });
   }
-  const count = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM posts');
-  if (!count?.n) await rebuildIndex(db);
+  const count = await db.getFirstAsync<{ n: number; stale: number }>(
+    "SELECT COUNT(*) AS n, SUM(search = '' AND deleted = 0) AS stale FROM posts",
+  );
+  if (!count?.n || count.stale) await rebuildIndex(db);
 }
 
 export async function listFeed(db: SQLiteDatabase): Promise<IndexedPost[]> {
-  const rows = await db.getAllAsync<Row>('SELECT json, dir FROM posts WHERE deleted = 0 ORDER BY created_at DESC');
+  const rows = await db.getAllAsync<Row>(`SELECT json, dir, frame FROM ${NUMBERED} ORDER BY created_at DESC, id DESC`);
   return rows.map(toIndexed);
 }
 
 export async function listDays(db: SQLiteDatabase, from: string, to: string): Promise<IndexedPost[]> {
   const rows = await db.getAllAsync<Row>(
-    'SELECT json, dir FROM posts WHERE deleted = 0 AND day BETWEEN ? AND ? ORDER BY created_at',
+    `SELECT json, dir, frame FROM ${NUMBERED} WHERE day BETWEEN ? AND ? ORDER BY created_at, id`,
     from,
     to,
   );
@@ -51,8 +59,32 @@ export async function listDays(db: SQLiteDatabase, from: string, to: string): Pr
 }
 
 export async function getPost(db: SQLiteDatabase, id: string): Promise<IndexedPost | null> {
-  const row = await db.getFirstAsync<Row>('SELECT json, dir FROM posts WHERE id = ?', id);
+  const row = await db.getFirstAsync<Row>(`SELECT json, dir, frame FROM ${NUMBERED} WHERE id = ?`, id);
   return row ? toIndexed(row) : null;
+}
+
+async function getStored(db: SQLiteDatabase, id: string): Promise<{ post: Post; dir: string } | null> {
+  const row = await db.getFirstAsync<{ json: string; dir: string }>('SELECT json, dir FROM posts WHERE id = ?', id);
+  return row ? { post: JSON.parse(row.json) as Post, dir: row.dir } : null;
+}
+
+export async function searchPosts(db: SQLiteDatabase, query: string): Promise<IndexedPost[]> {
+  const words = query.toLowerCase().split(/\s+/).map((w) => w.replace(/^#/, '')).filter(Boolean);
+  if (words.length === 0) return [];
+  const clause = words.map(() => 'search LIKE ?').join(' AND ');
+  const params = words.map((w) => `%${w}%`);
+  const rows = await db.getAllAsync<Row>(
+    `SELECT json, dir, frame FROM ${NUMBERED} WHERE ${clause} ORDER BY created_at DESC LIMIT 200`,
+    params,
+  );
+  return rows.map(toIndexed);
+}
+
+export async function listWithCoords(db: SQLiteDatabase): Promise<IndexedPost[]> {
+  const rows = await db.getAllAsync<Row>(
+    `SELECT json, dir, frame FROM ${NUMBERED} WHERE json_extract(json, '$.place.lat') IS NOT NULL ORDER BY created_at`,
+  );
+  return rows.map(toIndexed);
 }
 
 export async function countPosts(db: SQLiteDatabase): Promise<number> {
@@ -60,17 +92,11 @@ export async function countPosts(db: SQLiteDatabase): Promise<number> {
   return row?.n ?? 0;
 }
 
-async function nextFrame(db: SQLiteDatabase): Promise<number> {
-  const row = await db.getFirstAsync<{ n: number | null }>('SELECT MAX(frame) AS n FROM posts');
-  return (row?.n ?? 0) + 1;
-}
-
 async function indexPost(db: SQLiteDatabase, post: Post, dir: string): Promise<void> {
   await db.runAsync(
-    `INSERT OR REPLACE INTO posts (id, frame, dir, created_at, day, updated_at, rev, text, tags, deleted, json)
+    `INSERT OR REPLACE INTO posts (id, dir, created_at, day, updated_at, rev, text, tags, search, deleted, json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     post.id,
-    post.frame,
     dir,
     post.createdAt,
     dayKey(post.createdAt),
@@ -78,6 +104,7 @@ async function indexPost(db: SQLiteDatabase, post: Post, dir: string): Promise<v
     post.rev,
     post.text,
     post.tags.join(' '),
+    [post.text, post.tags.join(' '), post.place?.name ?? ''].join(' ').toLowerCase(),
     post.deleted ? 1 : 0,
     JSON.stringify(post),
   );
@@ -109,7 +136,7 @@ export async function savePost(
   quality: PhotoQuality,
   id?: string,
 ): Promise<Post> {
-  const existing = id ? await getPost(db, id) : null;
+  const existing = id ? await getStored(db, id) : null;
   const postId = existing?.post.id ?? ulid();
   const createdAt = toLocalIso(draft.createdAt);
   const dirRel = postDirName(postId, createdAt);
@@ -130,7 +157,6 @@ export async function savePost(
   const post: Post = {
     format: POST_FORMAT,
     id: postId,
-    frame: existing?.post.frame ?? (await nextFrame(db)),
     createdAt,
     updatedAt: toLocalIso(new Date()),
     rev: (existing?.post.rev ?? 0) + 1,
@@ -145,7 +171,7 @@ export async function savePost(
 }
 
 export async function deletePost(db: SQLiteDatabase, id: string): Promise<void> {
-  const existing = await getPost(db, id);
+  const existing = await getStored(db, id);
   if (!existing) return;
   removeMedia(dirOf(existing.dir), existing.post.media);
   const post: Post = {
@@ -158,7 +184,9 @@ export async function deletePost(db: SQLiteDatabase, id: string): Promise<void> 
   await commit(db, post, existing.dir);
 }
 
-async function collect(dir: Directory, rel: string, out: IndexedPost[]): Promise<void> {
+type Found = { post: Post; dir: string };
+
+async function collect(dir: Directory, rel: string, out: Found[]): Promise<void> {
   for (const entry of dir.list()) {
     if (entry instanceof Directory) {
       if (entry.name !== 'media' && entry.name !== 'thumbs') await collect(entry, `${rel}/${entry.name}`, out);
@@ -170,7 +198,7 @@ async function collect(dir: Directory, rel: string, out: IndexedPost[]): Promise
 }
 
 export async function rebuildIndex(db: SQLiteDatabase): Promise<number> {
-  const found: IndexedPost[] = [];
+  const found: Found[] = [];
   const posts = postsDir();
   if (posts.exists) await collect(posts, 'posts', found);
   await db.withTransactionAsync(async () => {

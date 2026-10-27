@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import { colors } from './theme';
+import type { Palette } from './theme';
+import { useStyles } from './ThemeProvider';
 
 export const FEED_MIN_RATIO = 3 / 4;
 export const FEED_MAX_RATIO = 16 / 9;
@@ -15,16 +16,18 @@ type Props = {
   h: number;
   width: number;
   frameRatio?: number;
+  fit?: 'cover' | 'whole';
   children?: ReactNode;
 };
 
-export function PhotoFrame({ uri, blurUri, w, h, width, frameRatio, children }: Props) {
+export function PhotoFrame({ uri, blurUri, w, h, width, frameRatio, fit = 'cover', children }: Props) {
+  const styles = useStyles(makeStyles);
   const ratio = w / h;
   const frame = frameRatio ?? clampRatio(ratio, FEED_MIN_RATIO, FEED_MAX_RATIO);
-  const exact = Math.abs(frame - ratio) < 0.01;
+  const whole = fit === 'whole' && Math.abs(frame - ratio) >= 0.01;
   return (
     <View style={[styles.frame, { width, height: width / frame }]}>
-      {!exact && (
+      {whole && (
         <>
           <Image source={{ uri: blurUri ?? uri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={30} />
           <View style={[StyleSheet.absoluteFill, styles.dim]} />
@@ -33,7 +36,7 @@ export function PhotoFrame({ uri, blurUri, w, h, width, frameRatio, children }: 
       <Image
         source={{ uri }}
         style={StyleSheet.absoluteFill}
-        contentFit={exact ? 'cover' : 'contain'}
+        contentFit={whole ? 'contain' : 'cover'}
         transition={120}
         recyclingKey={uri}
       />
@@ -42,7 +45,8 @@ export function PhotoFrame({ uri, blurUri, w, h, width, frameRatio, children }: 
   );
 }
 
-const styles = StyleSheet.create({
-  frame: { overflow: 'hidden', backgroundColor: colors.photoBg },
-  dim: { backgroundColor: 'rgba(0,0,0,0.12)' },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    frame: { overflow: 'hidden', backgroundColor: c.photoBg },
+    dim: { backgroundColor: 'rgba(0,0,0,0.12)' },
+  });

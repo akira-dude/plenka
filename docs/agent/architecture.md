@@ -5,8 +5,9 @@
 ```
 src/app (routes, screens)
    │  uses
-   ├── src/ui        PhotoFrame, PostCard, theme
+   ├── src/ui        PhotoFrame, PostCard, PostRow, ZoomableImage, ThemeProvider, mapHtml
    ├── src/hooks     useDbQuery
+   ├── src/device    location (GPS, reverse geocoding)
    └── src/storage   posts (repository) ── photos ── paths ── files ── db ── settings
                          │
                      src/domain   post format, dates, ulid  (pure, no Expo UI)
@@ -19,10 +20,11 @@ src/app (routes, screens)
 
 - Root: `Paths.document/plenka/` (app-internal, invisible to other apps and the gallery). Layout: `data-format.md`.
 - SQLite `plenka.db` (default expo-sqlite location), schema in `src/storage/db.ts`, versioned by `PRAGMA user_version`:
-  - `posts` — one row per post; `json` holds the full `post.json`, other columns exist for filtering/sorting (`day`, `created_at`, `deleted`).
+  - `posts` — one row per post; `json` holds the full `post.json`, other columns exist for filtering/sorting (`day`, `created_at`, `deleted`) and `search` (lowercased text + tags + place, because SQLite `lower`/`LIKE` ignore Cyrillic case).
+  - Post numbers are computed, not stored: `ROW_NUMBER() OVER (ORDER BY created_at, id)` over non-deleted posts, so a post written for an earlier date takes its place in the sequence.
   - `outbox` — post ids changed since the last upload (filled now, drained by the future Drive sync).
-  - `settings` — key/value (`photoQuality`).
-- `initStorage` (run by `SQLiteProvider.onInit`): migrate → ensure root + `manifest.json` → if the index is empty, `rebuildIndex` from files (this is also the import path for a copied folder).
+  - `settings` — key/value (`photoQuality`, `themeMode`).
+- `initStorage` (run by `SQLiteProvider.onInit`): migrate → ensure root + `manifest.json` → if the index is empty or has rows without `search`, `rebuildIndex` from files (this is also the import path for a copied folder).
 
 ## Write path (`src/storage/posts.ts`)
 
@@ -43,19 +45,31 @@ src/app (routes, screens)
 
 ## Display rules
 
-- `PhotoFrame`: feed frame ratio is clamped to 3:4…16:9. A photo outside that range is shown whole (`contain`) over a blurred copy of its thumbnail. Never crop the file.
-- Post view: frame ratio comes from the first photo, clamped so it takes at most ~72% of the screen height; other photos of the post fit into the same frame.
+- `PhotoFrame`: feed frame ratio is clamped to 3:4…16:9. In the feed (`fit="cover"`) a photo outside that range fills the frame and is cropped along its long side, display only. Never crop the file.
+- Post view (`fit="whole"`): frame ratio comes from the first photo, clamped so it takes at most ~72% of the screen height; other photos are shown whole over a blurred copy of their thumbnail. Tap opens the full-screen viewer.
+- Viewer (`ZoomableImage`): pinch 1–5x, pan when zoomed, double tap 2.5x / reset; react-native-gesture-handler v3 hooks with `runOnJS: true`.
 - Grid and calendar use square-cropped thumbnails only.
 
 ## Screens
 
 | Route | File | Notes |
 | --- | --- | --- |
-| Feed | `src/app/(tabs)/index.tsx` | Sections by day, list / grid toggle |
+| Feed | `src/app/(tabs)/index.tsx` | Sections by month, list / grid toggle, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
-| Settings | `src/app/(tabs)/settings.tsx` | Photo quality, storage usage, rebuild index |
+| Search | `src/app/(tabs)/search.tsx` | Text / tag / place search over the `search` column |
+| Settings | `src/app/(tabs)/settings.tsx` | Drive status (placeholder), theme, photo quality, storage usage, rebuild index |
 | Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately) |
-| Post | `src/app/post/[id].tsx` | Pager, text, tags, edit, delete |
+| Post | `src/app/post/[id].tsx` | Pager, text, tags, place link → map; header: edit, delete (red) |
+| Viewer | `src/app/viewer/[id].tsx` | Full-screen black pager with zoom, param `index` |
+| Map | `src/app/map.tsx` | WebView with Leaflet (unpkg) and CARTO tiles, needs internet; param `focus` = post id; popup button posts the id back |
 
 Screens reload their data on focus via `useDbQuery`; there is no global store.
+
+## Theme
+
+`ThemeProvider` (inside `SQLiteProvider`) reads `themeMode` (`system` / `light` / `dark`) from settings, calls `Appearance.setColorScheme` so native dialogs follow, and exposes the palette. The root layout maps it onto the navigation theme, `StatusBar` and `NavigationBar`, so Android system buttons stay visible in both themes. `app.json` uses `userInterfaceStyle: automatic`.
+
+## Location
+
+`src/device/location.ts`, foreground permission only. A new post (not an edit, not opened from the archive with a date) asks for the current position on open; EXIF GPS of a picked photo wins over the device position; the crosshair button forces a fresh device fix. Reverse geocoding fills the place name only when the field is empty and gives up quietly offline.

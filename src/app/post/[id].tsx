@@ -8,13 +8,16 @@ import { useDbQuery } from '@/hooks/useDbQuery';
 import { mediaUri } from '@/storage/paths';
 import { deletePost, getPost } from '@/storage/posts';
 import { PhotoFrame, clampRatio } from '@/ui/PhotoFrame';
-import { colors, fonts, space } from '@/ui/theme';
+import { fonts, space, type Palette } from '@/ui/theme';
+import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const MAX_PHOTO_SHARE = 0.72;
 const PANORAMA_RATIO = 3;
 
 export default function PostScreen() {
   const db = useSQLiteContext();
+  const styles = useStyles(makeStyles);
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width, height } = useWindowDimensions();
   const [page, setPage] = useState(0);
@@ -39,19 +42,30 @@ export default function PostScreen() {
     return <Stack.Screen options={{ title: '' }} />;
   }
 
-  const { post, dir } = data;
+  const { post, dir, frame } = data;
   const first = post.media[0];
   const frameRatio = first ? clampRatio(first.w / first.h, width / (height * MAX_PHOTO_SHARE), PANORAMA_RATIO) : 1;
+  const hasCoords = post.place?.lat != null && post.place.lon != null;
 
   return (
     <View style={styles.screen}>
       <Stack.Screen
         options={{
-          title: `№ ${post.frame}`,
+          title: `№ ${frame}`,
           headerRight: () => (
-            <Pressable hitSlop={10} onPress={() => router.push({ pathname: '/compose', params: { id: post.id } })}>
-              <Feather name="edit-2" size={18} color={colors.ink} />
-            </Pressable>
+            <View style={styles.actions}>
+              <Pressable
+                style={styles.action}
+                hitSlop={6}
+                accessibilityLabel="Править запись"
+                onPress={() => router.push({ pathname: '/compose', params: { id: post.id } })}
+              >
+                <Feather name="edit-2" size={18} color={colors.ink} />
+              </Pressable>
+              <Pressable style={styles.action} hitSlop={6} accessibilityLabel="Удалить запись" onPress={confirmDelete}>
+                <Feather name="trash-2" size={18} color={colors.danger} />
+              </Pressable>
+            </View>
           ),
         }}
       />
@@ -65,15 +79,18 @@ export default function PostScreen() {
               showsHorizontalScrollIndicator={false}
               keyExtractor={(m) => m.file}
               onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
-              renderItem={({ item }) => (
-                <PhotoFrame
-                  uri={mediaUri(dir, item.file)}
-                  blurUri={mediaUri(dir, item.thumb)}
-                  w={item.w}
-                  h={item.h}
-                  width={width}
-                  frameRatio={frameRatio}
-                />
+              renderItem={({ item, index }) => (
+                <Pressable onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: post.id, index } })}>
+                  <PhotoFrame
+                    uri={mediaUri(dir, item.file)}
+                    blurUri={mediaUri(dir, item.thumb)}
+                    w={item.w}
+                    h={item.h}
+                    width={width}
+                    frameRatio={frameRatio}
+                    fit="whole"
+                  />
+                </Pressable>
               )}
             />
             {post.media.length > 1 && (
@@ -87,42 +104,43 @@ export default function PostScreen() {
         )}
 
         <View style={styles.body}>
-          <Text style={styles.stamp}>
-            {formatStamp(post.createdAt)}
-            {post.place ? ` · ${post.place.name}` : ''}
-          </Text>
+          <Text style={styles.stamp}>{formatStamp(post.createdAt)}</Text>
+          {post.place && (
+            <Pressable
+              style={styles.place}
+              disabled={!hasCoords}
+              onPress={() => router.push({ pathname: '/map', params: { focus: post.id } })}
+            >
+              <Feather name="map-pin" size={14} color={hasCoords ? colors.accent : colors.muted} />
+              <Text style={[styles.placeText, hasCoords && styles.placeLink]}>
+                {post.place.name || 'Место на карте'}
+              </Text>
+            </Pressable>
+          )}
           {post.text ? <Text style={styles.text}>{post.text}</Text> : null}
           {post.tags.length > 0 && <Text style={styles.tags}>{post.tags.map((t) => `#${t}`).join(' ')}</Text>}
-          <View style={styles.footer}>
-            <Text style={styles.stamp}>на телефоне · правка {post.rev}</Text>
-            <Pressable hitSlop={10} onPress={confirmDelete}>
-              <Text style={styles.delete}>Удалить</Text>
-            </Pressable>
-          </View>
+          <Text style={[styles.stamp, styles.footer]}>на телефоне · правка {post.rev}</Text>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingBottom: 32 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 5, paddingTop: 10 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.faint },
-  dotOn: { width: 18, backgroundColor: colors.ink },
-  body: { paddingHorizontal: space.gutter, paddingTop: 12, gap: 10 },
-  stamp: { fontFamily: fonts.mono, fontSize: 12, color: colors.muted },
-  text: { fontSize: 16, lineHeight: 24, color: colors.ink },
-  tags: { fontSize: 14, fontWeight: '500', color: colors.accent },
-  footer: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  delete: { fontSize: 14, fontWeight: '600', color: colors.danger },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.bg },
+    content: { paddingBottom: 32 },
+    actions: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: -8 },
+    action: { padding: 10 },
+    dots: { flexDirection: 'row', justifyContent: 'center', gap: 5, paddingTop: 10 },
+    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.faint },
+    dotOn: { width: 18, backgroundColor: c.ink },
+    body: { paddingHorizontal: space.gutter, paddingTop: 12, gap: 10 },
+    stamp: { fontFamily: fonts.mono, fontSize: 12, color: c.muted },
+    place: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
+    placeText: { fontSize: 14, color: c.muted },
+    placeLink: { color: c.accent, fontWeight: '500' },
+    text: { fontSize: 16, lineHeight: 24, color: c.ink },
+    tags: { fontSize: 14, fontWeight: '500', color: c.accent },
+    footer: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.line },
+  });

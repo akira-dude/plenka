@@ -4,23 +4,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { useSQLiteContext } from 'expo-sqlite';
+import Feather from '@expo/vector-icons/Feather';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { rootDir } from '@/storage/paths';
 import { countPosts, rebuildIndex } from '@/storage/posts';
 import { getPhotoQuality, setPhotoQuality, type PhotoQuality } from '@/storage/settings';
-import { colors, fonts, space } from '@/ui/theme';
+import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
+import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const QUALITY_OPTIONS: { value: PhotoQuality; title: string; hint: string }[] = [
   { value: 'visual', title: 'Без видимых потерь', hint: 'WebP 90, полное разрешение, пропорции как у снимка. Примерно 1–2 МБ на фото.' },
   { value: 'original', title: 'Оригинал', hint: 'Файл сохраняется как снят, байт в байт. Примерно 3–6 МБ на фото.' },
 ];
 
-type Overview = { quality: PhotoQuality; posts: number; used: number; free: number };
+const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'system', label: 'Системная' },
+  { value: 'light', label: 'Светлая' },
+  { value: 'dark', label: 'Тёмная' },
+];
+
+type Overview = { quality: PhotoQuality; posts: number; queued: number; used: number; free: number };
 
 async function loadOverview(db: SQLiteDatabase): Promise<Overview> {
+  const queued = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM outbox');
   return {
     quality: await getPhotoQuality(db),
     posts: await countPosts(db),
+    queued: queued?.n ?? 0,
     used: rootDir().size ?? 0,
     free: Paths.availableDiskSpace,
   };
@@ -33,6 +43,8 @@ function formatBytes(bytes: number): string {
 
 export default function Settings() {
   const db = useSQLiteContext();
+  const styles = useStyles(makeStyles);
+  const { colors, mode, setMode } = useTheme();
   const { data, reload } = useDbQuery<Overview | null>(loadOverview, null);
   const [busy, setBusy] = useState(false);
 
@@ -60,9 +72,32 @@ export default function Settings() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Фото и память</Text>
+        <Text style={styles.title}>Настройки</Text>
 
-        <Text style={styles.section}>Качество хранения</Text>
+        <Text style={styles.section}>Google Drive</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Feather name="cloud-off" size={18} color={colors.muted} />
+            <Text style={styles.cardTitle}>Не подключён</Text>
+          </View>
+          <Text style={styles.note}>
+            Отправка копий в Drive появится в следующей версии. Ждут отправки записей: {data?.queued ?? 0}.
+          </Text>
+        </View>
+
+        <Text style={styles.section}>Тема</Text>
+        <View style={styles.segment}>
+          {THEME_OPTIONS.map((o) => {
+            const on = mode === o.value;
+            return (
+              <Pressable key={o.value} style={[styles.segItem, on && styles.segOn]} onPress={() => setMode(o.value)}>
+                <Text style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.section}>Качество хранения фото</Text>
         {QUALITY_OPTIONS.map((o) => {
           const on = data?.quality === o.value;
           return (
@@ -109,45 +144,54 @@ export default function Settings() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: space.gutter, paddingBottom: 32, gap: 10 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.ink, paddingTop: 8 },
-  section: {
-    marginTop: 12,
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  option: {
-    flexDirection: 'row',
-    gap: 10,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.card,
-  },
-  optionOn: { borderColor: colors.accent },
-  radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: colors.faint, marginTop: 1 },
-  radioOn: { borderWidth: 6, borderColor: colors.accent },
-  optionBody: { flex: 1, gap: 2 },
-  optionTitle: { fontSize: 15, fontWeight: '600', color: colors.ink },
-  optionHint: { fontSize: 13, color: colors.muted, lineHeight: 18 },
-  note: { fontSize: 13, color: colors.muted, lineHeight: 19 },
-  stats: { gap: 4 },
-  stat: { fontFamily: fonts.mono, fontSize: 13, color: colors.ink },
-  warn: { backgroundColor: colors.amberSoft, borderRadius: 12, padding: 12 },
-  warnText: { fontSize: 13, color: colors.amber, lineHeight: 19 },
-  button: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-  },
-  buttonText: { fontSize: 15, fontWeight: '600', color: colors.ink },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.bg },
+    content: { paddingHorizontal: space.gutter, paddingBottom: 32, gap: 10 },
+    title: { fontSize: 24, fontWeight: '800', color: c.ink, paddingTop: 8 },
+    section: {
+      marginTop: 12,
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    card: { backgroundColor: c.card, borderRadius: 12, borderWidth: 1, borderColor: c.line, padding: 12, gap: 6 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    cardTitle: { fontSize: 15, fontWeight: '600', color: c.ink },
+    segment: { flexDirection: 'row', padding: 2, borderRadius: 10, backgroundColor: c.photoBg },
+    segItem: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
+    segOn: { backgroundColor: c.card },
+    segText: { fontSize: 13, fontWeight: '600', color: c.muted },
+    segTextOn: { color: c.ink },
+    option: {
+      flexDirection: 'row',
+      gap: 10,
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.line,
+      backgroundColor: c.card,
+    },
+    optionOn: { borderColor: c.accent },
+    radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: c.faint, marginTop: 1 },
+    radioOn: { borderWidth: 6, borderColor: c.accent },
+    optionBody: { flex: 1, gap: 2 },
+    optionTitle: { fontSize: 15, fontWeight: '600', color: c.ink },
+    optionHint: { fontSize: 13, color: c.muted, lineHeight: 18 },
+    note: { fontSize: 13, color: c.muted, lineHeight: 19 },
+    stats: { gap: 4 },
+    stat: { fontFamily: fonts.mono, fontSize: 13, color: c.ink },
+    warn: { backgroundColor: c.amberSoft, borderRadius: 12, padding: 12 },
+    warnText: { fontSize: 13, color: c.amber, lineHeight: 19 },
+    button: {
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.line,
+      backgroundColor: c.card,
+      alignItems: 'center',
+    },
+    buttonText: { fontSize: 15, fontWeight: '600', color: c.ink },
+  });

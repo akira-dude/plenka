@@ -1,4 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import type { ThemeMode } from '@/ui/theme';
 
 export type PhotoQuality = 'visual' | 'original';
 
@@ -17,4 +18,13 @@ export async function getPhotoQuality(db: SQLiteDatabase): Promise<PhotoQuality>
 
 export async function setPhotoQuality(db: SQLiteDatabase, quality: PhotoQuality): Promise<void> {
   await set(db, 'photoQuality', quality);
+}
+
+export async function getThemeMode(db: SQLiteDatabase): Promise<ThemeMode> {
+  const value = await get(db, 'themeMode');
+  return value === 'light' || value === 'dark' ? value : 'system';
+}
+
+export async function setThemeMode(db: SQLiteDatabase, mode: ThemeMode): Promise<void> {
+  await set(db, 'themeMode', mode);
 }

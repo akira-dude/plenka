@@ -3,16 +3,22 @@ import { FlatList, Pressable, SectionList, StyleSheet, Text, View, useWindowDime
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { dayKey, formatDayTitle } from '@/domain/dates';
+import Feather from '@expo/vector-icons/Feather';
+import { monthTitle } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { listFeed, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
 import { PostCard } from '@/ui/PostCard';
-import { colors, space } from '@/ui/theme';
+import { space, type Palette } from '@/ui/theme';
+import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const GRID_GAP = 2;
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 export default function Feed() {
+  const styles = useStyles(makeStyles);
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const { data } = useDbQuery(listFeed, []);
   const [grid, setGrid] = useState(false);
@@ -20,12 +26,12 @@ export default function Feed() {
   const cell = (cardWidth - GRID_GAP * 2) / 3;
 
   const sections = useMemo(() => {
-    const byDay = new Map<string, IndexedPost[]>();
+    const byMonth = new Map<string, IndexedPost[]>();
     for (const item of data) {
-      const key = dayKey(item.post.createdAt);
-      byDay.set(key, [...(byDay.get(key) ?? []), item]);
+      const key = item.post.createdAt.slice(0, 7);
+      byMonth.set(key, [...(byMonth.get(key) ?? []), item]);
     }
-    return [...byDay].map(([key, items]) => ({ key, data: items }));
+    return [...byMonth].map(([key, items]) => ({ key, data: items }));
   }, [data]);
 
   const renderCard = useCallback(
@@ -37,6 +43,9 @@ export default function Feed() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.logo}>Плёнка</Text>
+        <Pressable style={styles.iconButton} hitSlop={8} onPress={() => router.push('/map')}>
+          <Feather name="map" size={20} color={colors.ink} />
+        </Pressable>
       </View>
       <View style={styles.segment}>
         {(['Лента', 'Сетка'] as const).map((label, i) => {
@@ -60,7 +69,7 @@ export default function Feed() {
           data={data}
           numColumns={3}
           keyExtractor={(item) => item.post.id}
-          contentContainerStyle={styles.gridList}
+          contentContainerStyle={styles.list}
           columnWrapperStyle={{ gap: GRID_GAP }}
           ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
           renderItem={({ item }) => {
@@ -87,7 +96,7 @@ export default function Feed() {
           keyExtractor={(item) => item.post.id}
           contentContainerStyle={styles.list}
           stickySectionHeadersEnabled={false}
-          renderSectionHeader={({ section }) => <Text style={styles.day}>{formatDayTitle(section.key)}</Text>}
+          renderSectionHeader={({ section }) => <Text style={styles.month}>{capitalize(monthTitle(section.key))}</Text>}
           renderItem={renderCard}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
@@ -96,37 +105,37 @@ export default function Feed() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: space.gutter, paddingTop: 8, paddingBottom: 10 },
-  logo: { fontSize: 24, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
-  segment: {
-    flexDirection: 'row',
-    marginHorizontal: space.gutter,
-    marginBottom: 8,
-    padding: 2,
-    borderRadius: 10,
-    backgroundColor: colors.photoBg,
-  },
-  segItem: { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' },
-  segOn: { backgroundColor: colors.card },
-  segText: { fontSize: 13, fontWeight: '600', color: colors.muted },
-  segTextOn: { color: colors.ink },
-  list: { paddingHorizontal: space.gutter, paddingBottom: 24 },
-  gridList: { paddingHorizontal: space.gutter, paddingBottom: 24 },
-  day: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  fill: { width: '100%', height: '100%' },
-  textTile: { backgroundColor: colors.card, padding: 8 },
-  textTileText: { fontSize: 11, color: colors.ink },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.bg },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: space.gutter,
+      paddingTop: 8,
+      paddingBottom: 10,
+    },
+    logo: { fontSize: 24, fontWeight: '800', color: c.ink, letterSpacing: -0.5 },
+    iconButton: { padding: 8 },
+    segment: {
+      flexDirection: 'row',
+      marginHorizontal: space.gutter,
+      marginBottom: 4,
+      padding: 2,
+      borderRadius: 10,
+      backgroundColor: c.photoBg,
+    },
+    segItem: { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' },
+    segOn: { backgroundColor: c.card },
+    segText: { fontSize: 13, fontWeight: '600', color: c.muted },
+    segTextOn: { color: c.ink },
+    list: { paddingHorizontal: space.gutter, paddingTop: 8, paddingBottom: 24 },
+    month: { fontSize: 18, fontWeight: '800', color: c.ink, paddingTop: 14, paddingBottom: 10 },
+    fill: { width: '100%', height: '100%' },
+    textTile: { backgroundColor: c.card, padding: 8 },
+    textTileText: { fontSize: 11, color: c.ink },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 8 },
+    emptyTitle: { fontSize: 18, fontWeight: '700', color: c.ink },
+    emptyText: { fontSize: 14, color: c.muted, textAlign: 'center', lineHeight: 20 },
+  });

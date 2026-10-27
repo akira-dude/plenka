@@ -6,16 +6,18 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Feather from '@expo/vector-icons/Feather';
+import { currentCoords, formatCoords, placeName, type Coords } from '@/device/location';
 import { formatDateTime, parseDayKey, parseExifDate, parseExifGps } from '@/domain/dates';
 import { parseTags, type MediaItem } from '@/domain/post';
 import { mediaUri } from '@/storage/paths';
 import type { PickedPhoto } from '@/storage/photos';
 import { getPost, savePost } from '@/storage/posts';
 import { getPhotoQuality } from '@/storage/settings';
-import { colors, space } from '@/ui/theme';
+import { space, type Palette } from '@/ui/theme';
+import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 type Params = { id?: string; date?: string; source?: 'camera' | 'library' };
-type Coords = { lat: number; lon: number } | null;
+type CoordsSource = 'post' | 'photo' | 'device';
 
 const THUMB = 76;
 
@@ -29,6 +31,8 @@ function initialDate(day?: string): Date {
 
 export default function Compose() {
   const db = useSQLiteContext();
+  const styles = useStyles(makeStyles);
+  const { colors } = useTheme();
   const params = useLocalSearchParams<Params>();
   const editing = Boolean(params.id);
 
@@ -39,11 +43,32 @@ export default function Compose() {
   const [text, setText] = useState('');
   const [tags, setTags] = useState('');
   const [place, setPlace] = useState('');
-  const [coords, setCoords] = useState<Coords>(null);
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const autoLocate = !editing && !params.date;
+  const [locating, setLocating] = useState(autoLocate);
   const [date, setDate] = useState(() => initialDate(params.date));
   const [saving, setSaving] = useState(false);
   const dateFixed = useRef(Boolean(params.date) || editing);
+  const coordsSource = useRef<CoordsSource | null>(null);
   const launched = useRef(false);
+
+  const applyCoords = useCallback(async (next: Coords, source: CoordsSource) => {
+    coordsSource.current = source;
+    setCoords(next);
+    const name = await placeName(next);
+    if (name) setPlace((prev) => (prev.trim() ? prev : name));
+  }, []);
+
+  const locate = useCallback(
+    (force: boolean) =>
+      currentCoords()
+        .catch(() => null)
+        .then(async (found) => {
+          if (found && (force || coordsSource.current !== 'photo')) await applyCoords(found, 'device');
+          setLocating(false);
+        }),
+    [applyCoords],
+  );
 
   useEffect(() => {
     if (!params.id) return;
@@ -55,47 +80,57 @@ export default function Compose() {
         setText(post.text);
         setTags(post.tags.join(' '));
         setPlace(post.place?.name ?? '');
-        setCoords(post.place?.lat != null && post.place.lon != null ? { lat: post.place.lat, lon: post.place.lon } : null);
+        if (post.place?.lat != null && post.place.lon != null) {
+          coordsSource.current = 'post';
+          setCoords({ lat: post.place.lat, lon: post.place.lon });
+        }
         setDate(new Date(post.createdAt));
       }
       setLoaded(true);
     });
   }, [db, params.id]);
 
-  const pick = useCallback(async (source: 'camera' | 'library') => {
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 1, exif: true };
-    let result: ImagePicker.ImagePickerResult;
-    if (source === 'camera') {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Нет доступа к камере', 'Разреши Плёнке доступ к камере в настройках Android.');
-        return;
-      }
-      result = await ImagePicker.launchCameraAsync(options);
-    } else {
-      result = await ImagePicker.launchImageLibraryAsync({ ...options, allowsMultipleSelection: true, orderedSelection: true });
-    }
-    if (result.canceled) return;
+  useEffect(() => {
+    if (autoLocate) void locate(false);
+  }, [autoLocate, locate]);
 
-    const photos: PickedPhoto[] = result.assets.map((a) => ({
-      uri: a.uri,
-      width: a.width,
-      height: a.height,
-      mimeType: a.mimeType,
-      exif: a.exif,
-    }));
-    setAdded((prev) => [...prev, ...photos]);
-
-    if (!dateFixed.current) {
-      const shot = photos.map((p) => parseExifDate(p.exif)).find((d): d is Date => d !== null);
-      if (shot) {
-        setDate(shot);
-        dateFixed.current = true;
+  const pick = useCallback(
+    async (source: 'camera' | 'library') => {
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 1, exif: true };
+      let result: ImagePicker.ImagePickerResult;
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Нет доступа к камере', 'Разреши Плёнке доступ к камере в настройках Android.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync(options);
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({ ...options, allowsMultipleSelection: true, orderedSelection: true });
       }
-    }
-    const gps = photos.map((p) => parseExifGps(p.exif)).find((g) => g !== null);
-    if (gps) setCoords((prev) => prev ?? gps);
-  }, []);
+      if (result.canceled) return;
+
+      const photos: PickedPhoto[] = result.assets.map((a) => ({
+        uri: a.uri,
+        width: a.width,
+        height: a.height,
+        mimeType: a.mimeType,
+        exif: a.exif,
+      }));
+      setAdded((prev) => [...prev, ...photos]);
+
+      if (!dateFixed.current) {
+        const shot = photos.map((p) => parseExifDate(p.exif)).find((d): d is Date => d !== null);
+        if (shot) {
+          setDate(shot);
+          dateFixed.current = true;
+        }
+      }
+      const gps = photos.map((p) => parseExifGps(p.exif)).find((g) => g !== null);
+      if (gps && coordsSource.current !== 'post' && coordsSource.current !== 'photo') await applyCoords(gps, 'photo');
+    },
+    [applyCoords],
+  );
 
   useEffect(() => {
     if (launched.current || !params.source) return;
@@ -140,7 +175,7 @@ export default function Compose() {
           createdAt: date,
           text,
           tags: parseTags(tags),
-          place: name ? { name, ...(coords ?? {}) } : null,
+          place: name || coords ? { name, ...(coords ?? {}) } : null,
           keep,
           add: added,
         },
@@ -204,16 +239,41 @@ export default function Compose() {
           textAlignVertical="top"
         />
 
-        <View style={[styles.field, styles.row]}>
-          <Feather name="map-pin" size={16} color={colors.ink} />
-          <TextInput
-            style={styles.inlineInput}
-            value={place}
-            onChangeText={setPlace}
-            placeholder="Место"
-            placeholderTextColor={colors.faint}
-          />
-          {coords && <Text style={styles.hint}>GPS из фото</Text>}
+        <View style={styles.field}>
+          <View style={styles.row}>
+            <Feather name="map-pin" size={16} color={colors.ink} />
+            <TextInput
+              style={styles.inlineInput}
+              value={place}
+              onChangeText={setPlace}
+              placeholder="Название места"
+              placeholderTextColor={colors.faint}
+            />
+          </View>
+          <View style={[styles.row, styles.coordsRow]}>
+            <Text style={styles.coords}>
+              {locating ? 'Определяю координаты…' : coords ? formatCoords(coords) : 'Координаты не заданы'}
+            </Text>
+            <Pressable style={styles.smallButton} hitSlop={6} onPress={() => {
+                setLocating(true);
+                void locate(true);
+              }}
+              disabled={locating}>
+              <Feather name="crosshair" size={15} color={colors.accent} />
+            </Pressable>
+            {coords && (
+              <Pressable
+                style={styles.smallButton}
+                hitSlop={6}
+                onPress={() => {
+                  coordsSource.current = null;
+                  setCoords(null);
+                }}
+              >
+                <Feather name="x" size={15} color={colors.muted} />
+              </Pressable>
+            )}
+          </View>
         </View>
 
         <View style={[styles.field, styles.row]}>
@@ -239,6 +299,8 @@ export default function Compose() {
 }
 
 function Thumb({ uri, onRemove }: { uri: string; onRemove: () => void }) {
+  const styles = useStyles(makeStyles);
+  const { colors } = useTheme();
   return (
     <View style={styles.thumb}>
       <Image source={{ uri }} style={styles.thumbImage} contentFit="cover" />
@@ -249,52 +311,55 @@ function Thumb({ uri, onRemove }: { uri: string; onRemove: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  content: { padding: space.gutter, gap: 10 },
-  strip: { gap: 8, paddingBottom: 4 },
-  thumb: { width: THUMB, height: THUMB, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.photoBg },
-  thumbImage: { width: '100%', height: '100%' },
-  remove: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.overlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addTile: {
-    width: THUMB,
-    height: THUMB,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.faint,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  addTileText: { fontSize: 11, color: colors.muted },
-  field: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  fieldText: { flex: 1, fontSize: 15, color: colors.ink },
-  link: { fontSize: 13, fontWeight: '600', color: colors.accent },
-  textArea: { minHeight: 120, fontSize: 15, color: colors.ink, lineHeight: 21 },
-  inlineInput: { flex: 1, fontSize: 15, color: colors.ink, padding: 0 },
-  hint: { fontSize: 11, color: colors.muted },
-  note: { fontSize: 13, color: colors.muted },
-  save: { marginTop: 6, backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
-  saveOff: { opacity: 0.5 },
-  saveText: { color: colors.onAccent, fontSize: 16, fontWeight: '700' },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.bg },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
+    content: { padding: space.gutter, gap: 10 },
+    strip: { gap: 8, paddingBottom: 4 },
+    thumb: { width: THUMB, height: THUMB, borderRadius: 10, overflow: 'hidden', backgroundColor: c.photoBg },
+    thumbImage: { width: '100%', height: '100%' },
+    remove: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: c.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addTile: {
+      width: THUMB,
+      height: THUMB,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: c.faint,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    addTileText: { fontSize: 11, color: c.muted },
+    field: {
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.line,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    coordsRow: { marginTop: 6, paddingLeft: 26 },
+    coords: { flex: 1, fontSize: 12, color: c.muted },
+    smallButton: { padding: 4 },
+    fieldText: { flex: 1, fontSize: 15, color: c.ink },
+    link: { fontSize: 13, fontWeight: '600', color: c.accent },
+    textArea: { minHeight: 120, fontSize: 15, color: c.ink, lineHeight: 21 },
+    inlineInput: { flex: 1, fontSize: 15, color: c.ink, padding: 0 },
+    note: { fontSize: 13, color: c.muted },
+    save: { marginTop: 6, backgroundColor: c.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
+    saveOff: { opacity: 0.5 },
+    saveText: { color: c.onAccent, fontSize: 16, fontWeight: '700' },
+  });

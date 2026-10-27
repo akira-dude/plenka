@@ -26,6 +26,11 @@ const MIGRATIONS = [
     value TEXT NOT NULL
   );
   `,
+  `
+  ALTER TABLE posts DROP COLUMN frame;
+  CREATE INDEX posts_created ON posts (created_at);
+  ALTER TABLE posts ADD COLUMN search TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

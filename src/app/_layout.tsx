@@ -1,13 +1,35 @@
-import { Stack } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationThemeProvider } from 'expo-router';
+import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initStorage } from '@/storage/posts';
-import { colors } from '@/ui/theme';
+import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 
 export default function RootLayout() {
   return (
-    <SQLiteProvider databaseName="plenka.db" onInit={initStorage}>
-      <StatusBar style="dark" />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SQLiteProvider databaseName="plenka.db" onInit={initStorage}>
+        <ThemeProvider>
+          <Navigation />
+        </ThemeProvider>
+      </SQLiteProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function Navigation() {
+  const { scheme, colors } = useTheme();
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+  return (
+    <NavigationThemeProvider
+      value={{
+        ...base,
+        colors: { ...base.colors, background: colors.bg, card: colors.bg, text: colors.ink, border: colors.line, primary: colors.accent },
+      }}
+    >
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <NavigationBar style={scheme === 'dark' ? 'dark' : 'light'} />
       <Stack
         screenOptions={{
           headerShadowVisible: false,
@@ -19,7 +41,9 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="compose" options={{ title: 'Новая запись' }} />
         <Stack.Screen name="post/[id]" options={{ title: '' }} />
+        <Stack.Screen name="viewer/[id]" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="map" options={{ title: 'Карта записей' }} />
       </Stack>
-    </SQLiteProvider>
+    </NavigationThemeProvider>
   );
 }

@@ -25,17 +25,18 @@ plenka/
 | --- | --- | --- |
 | `format` | `"plenka/1"` | Posts with another value are skipped by `parsePost` |
 | `id` | string | ULID, generated offline, time-sortable |
-| `frame` | number | Human-facing sequence number (`№ 412`), max + 1 at creation |
 | `createdAt` | string | Local ISO with offset, `2026-10-27T14:32:08+03:00`. The post's diary date, user-editable |
 | `updatedAt` | string | Same format, last change |
 | `rev` | number | +1 on every save or delete |
 | `text` | string | Trimmed, may be empty |
 | `tags` | string[] | Lowercase, no `#`, unique |
-| `place` | `{ name, lat?, lon? }` or `null` | `lat/lon` come from photo EXIF when present |
+| `place` | `{ name, lat?, lon? }` or `null` | `name` may be empty when only coordinates are known; `lat/lon` from photo EXIF or device GPS, 5 decimals |
 | `media` | MediaItem[] | Order = display order, first is the cover |
 | `deleted` | boolean | Tombstone: `true` + empty `media` |
 
 MediaItem: `{ file, thumb, type: "image", w, h, bytes, sha256 }` — paths are relative to the post folder; `w`/`h` are display dimensions after EXIF orientation; `sha256` is hex of the stored file.
+
+The human-facing number `№ N` is not part of the format: it is the post's rank by `createdAt`. Early test posts may still contain a `frame` field; it is ignored.
 
 ## Compatibility rules
 

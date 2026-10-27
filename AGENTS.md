@@ -13,10 +13,11 @@ Details are read on demand: `docs/agent/INDEX.md`.
 
 | Path | What |
 | --- | --- |
-| `src/app/` | Expo Router routes only. `(tabs)/` = bottom tabs, `compose.tsx` = new/edit post, `post/[id].tsx` = post view |
+| `src/app/` | Expo Router routes only. `(tabs)/` = bottom tabs (feed, archive, camera, search, settings), `compose.tsx` = new/edit post, `post/[id].tsx` = post view, `viewer/[id].tsx` = full-screen zoom, `map.tsx` = map of posts |
 | `src/domain/` | Pure logic, no React / Expo UI: `post.ts` (format types, parsing), `dates.ts` (ru formatting, local ISO, calendar), `ulid.ts` |
 | `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
-| `src/ui/` | Shared components and `theme.ts` (all colors live there) |
+| `src/ui/` | Shared components, `theme.ts` (light/dark palettes), `ThemeProvider.tsx` (`useTheme`, `useStyles`), `mapHtml.ts` (Leaflet page for the map WebView) |
+| `src/device/` | Device services: `location.ts` (GPS, reverse geocoding) |
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |
 | `docs/agent/` | Architecture, data format contract, roadmap |
@@ -30,6 +31,8 @@ Details are read on demand: `docs/agent/INDEX.md`.
 5. Routes in `src/app/` stay thin; non-route code goes to `src/domain`, `src/storage`, `src/ui`, `src/hooks`. Import via `@/…`.
 6. No comments in code except a rare one-line note on a non-obvious platform quirk.
 7. Android only. Do not add iOS/web-specific code paths.
+8. **Colors only from the palette.** Styles are built as `const makeStyles = (c: Palette) => StyleSheet.create(...)` and used via `useStyles(makeStyles)`; never hardcode a color in a screen (exception: the always-black full-screen viewer).
+9. The post number (`№ N`) is not stored: it is the post's rank by `createdAt`, computed in SQL (`NUMBERED` in `posts.ts`).
 
 ## Expo has changed — do not trust your training data
 

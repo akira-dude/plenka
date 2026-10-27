@@ -19,7 +19,6 @@ export type Place = {
 export type Post = {
   format: typeof POST_FORMAT;
   id: string;
-  frame: number;
   createdAt: string;
   updatedAt: string;
   rev: number;
@@ -37,7 +36,6 @@ export function parsePost(raw: unknown): Post | null {
   return {
     format: POST_FORMAT,
     id: p.id,
-    frame: Number(p.frame) || 0,
     createdAt: p.createdAt,
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : p.createdAt,
     rev: Number(p.rev) || 1,
