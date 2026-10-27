@@ -3,6 +3,7 @@ import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWind
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
+import { sharePhoto } from '@/device/share';
 import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { mediaUri } from '@/storage/paths';
@@ -47,6 +48,9 @@ export default function PostScreen() {
       },
     ]);
 
+  const share = (uri: string) =>
+    sharePhoto(uri).catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
+
   if (!data || data.post.deleted) {
     return <Stack.Screen options={{ title: '' }} />;
   }
@@ -68,6 +72,16 @@ export default function PostScreen() {
           title: `№ ${frame}`,
           headerRight: () => (
             <View style={styles.actions}>
+              {post.media.length > 0 && (
+                <Pressable
+                  style={styles.action}
+                  hitSlop={6}
+                  accessibilityLabel="Поделиться фото"
+                  onPress={() => share(mediaUri(dir, post.media[Math.min(page, post.media.length - 1)].file))}
+                >
+                  <Feather name="share-2" size={18} color={colors.ink} />
+                </Pressable>
+              )}
               <Pressable
                 style={styles.action}
                 hitSlop={6}

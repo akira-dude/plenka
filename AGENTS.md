@@ -1,6 +1,6 @@
 # Plenka (Плёнка) — agent guide
 
-Personal offline-first photo diary for Android. Expo + React Native + TypeScript. One user, one phone, no sharing, no video, no encryption. Every post is a plain folder (`post.json` + images); Google Drive is a one-way backup target (`src/sync/`).
+Personal offline-first photo diary for Android. Expo + React Native + TypeScript. One user, one phone, no video, no encryption; sharing is limited to sending a single photo through the system share sheet. Every post is a plain folder (`post.json` + images); Google Drive is a one-way backup target (`src/sync/`).
 
 Details are read on demand: `docs/agent/INDEX.md`.
 
@@ -17,7 +17,7 @@ Details are read on demand: `docs/agent/INDEX.md`.
 | `src/domain/` | Pure logic, no React / Expo UI: `post.ts` (format types, parsing), `dates.ts` (ru formatting, local ISO, calendar), `ulid.ts` |
 | `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
 | `src/ui/` | Shared components, `theme.ts` (light/dark palettes), `ThemeProvider.tsx` (`useTheme`, `useStyles`), `mapHtml.ts` (Leaflet page for the map WebView) |
-| `src/device/` | Device services: `location.ts` (GPS, reverse geocoding) |
+| `src/device/` | Device services: `location.ts` (GPS, reverse geocoding), `share.ts` (send one photo as JPEG through the system share sheet) |
 | `src/sync/` | Google Drive backup: `auth.ts` (Google sign-in, web client id), `drive.ts` (REST v3 client), `engine.ts` (outbox → Drive, restore, `useSyncState`), `useAutoSync.ts` (triggers) |
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |

@@ -2,7 +2,7 @@
 
 ## Decisions made with the user (2026-10-27)
 
-- Android only. Photos only, no video. No encryption. No sharing of any kind. Posts are written from one phone only, so sync is one-way (phone → cloud) with no conflict handling.
+- Android only. Photos only, no video. No encryption. Sharing (decided 2026-10-27): only one photo at a time through the system share sheet, converted to JPEG, no text, no links, no Drive links. Posts are written from one phone only, so sync is one-way (phone → cloud) with no conflict handling.
 - Cloud: Google Drive, scope `drive.file`, visible folder `My Drive/Плёнка`. Storage is meant to sit behind a `StorageProvider` interface so another backend (Yandex Disk, WebDAV, Syncthing) can be added later. GitHub was rejected for photo storage (repo size limits, binary history).
 - Photo quality: default "visually lossless" WebP 0.9 at full resolution; optional byte-for-byte original.
 - Photos taken in the app stay only in the app; picked gallery photos are copied, so deleting them from the gallery does not affect the diary.

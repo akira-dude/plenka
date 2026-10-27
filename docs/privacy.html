@@ -29,6 +29,9 @@
   <p>Приложение запрашивает только доступ <code>https://www.googleapis.com/auth/drive.file</code>. Это файлы, которые создало само приложение. Остальные файлы на вашем Drive приложению недоступны. Данные из Google API используются только для резервной копии и восстановления дневника и никому не передаются.</p>
   <p>Use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
+  <h2>Кнопка «Поделиться»</h2>
+  <p>Фото уходит в другое приложение только когда вы сами нажимаете «Поделиться» или проводите вверх в полноэкранном просмотре. Приложение передаёт копию одного фото в формате JPEG тому приложению, которое вы выбрали в системном меню. Текст, теги и место записи не передаются.</p>
+
   <h2>Сторонние сервисы</h2>
   <ul>
     <li><b>Карта записей:</b> подложка карты загружается с серверов OpenStreetMap (tile.openstreetmap.org), библиотека карт — с unpkg.com. Эти сервисы видят ваш IP-адрес и показываемый участок карты, но не тексты и фото записей.</li>
@@ -45,7 +48,7 @@
   <hr>
 
   <h2 lang="en">Summary in English</h2>
-  <p lang="en">Plenka is a personal offline photo diary for Android. Posts (photos, text, tags, date, location) are stored on the device and, if the user connects it, backed up to the user's own Google Drive using only the <code>drive.file</code> scope. No data is sent to the developer or sold or shared with third parties. There are no ads, analytics or trackers. The map screen loads tiles from OpenStreetMap (tile.openstreetmap.org) and the map library from unpkg.com. Use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Data can be deleted in the app, by uninstalling it, by deleting the "Плёнка" folder in Google Drive, and access can be revoked at myaccount.google.com/permissions.</p>
+  <p lang="en">Plenka is a personal offline photo diary for Android. Posts (photos, text, tags, date, location) are stored on the device and, if the user connects it, backed up to the user's own Google Drive using only the <code>drive.file</code> scope. No data is sent to the developer or sold or shared with third parties. A single photo is handed to another app only when the user taps Share (sent as a JPEG copy, without the post text, tags or location). There are no ads, analytics or trackers. The map screen loads tiles from OpenStreetMap (tile.openstreetmap.org) and the map library from unpkg.com. Use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Data can be deleted in the app, by uninstalling it, by deleting the "Плёнка" folder in Google Drive, and access can be revoked at myaccount.google.com/permissions.</p>
 </main>
 </body>
 </html>

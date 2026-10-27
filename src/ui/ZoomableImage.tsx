@@ -22,9 +22,13 @@ type Props = {
   height: number;
   onZoomChange: (zoomed: boolean) => void;
   onDismiss: () => void;
+  onShare: () => void;
 };
 
-export function ZoomableImage({ uri, width, height, onZoomChange, onDismiss }: Props) {
+const SHARE_DISTANCE = 90;
+const SHARE_PULL_LIMIT = 70;
+
+export function ZoomableImage({ uri, width, height, onZoomChange, onDismiss, onShare }: Props) {
   const [zoomed, setZoomed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -92,11 +96,15 @@ export function ZoomableImage({ uri, width, height, onZoomChange, onDismiss }: P
     activeOffsetY: DIRECTION_SLOP,
     failOffsetX: DIRECTION_SLOP,
     onUpdate: (e) => {
-      drag.value = Math.max(0, e.translationY);
+      drag.value = e.translationY >= 0 ? e.translationY : Math.max(e.translationY / 3, -SHARE_PULL_LIMIT);
     },
     onDeactivate: (e) => {
-      if (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY) onDismiss();
-      else drag.value = withTiming(0);
+      if (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY) {
+        onDismiss();
+        return;
+      }
+      if (e.translationY < -SHARE_DISTANCE || e.velocityY < -DISMISS_VELOCITY) onShare();
+      drag.value = withTiming(0);
     },
   });
 
@@ -117,11 +125,11 @@ export function ZoomableImage({ uri, width, height, onZoomChange, onDismiss }: P
   const gesture = useSimultaneousGestures(pinch, pan, dismissPan, doubleTap);
 
   const animated = useAnimatedStyle(() => ({
-    opacity: 1 - Math.min(drag.value / 600, 0.5),
+    opacity: 1 - Math.min(Math.max(drag.value, 0) / 600, 0.5),
     transform: [
       { translateX: x.value },
       { translateY: y.value + drag.value },
-      { scale: scale.value * (1 - Math.min(drag.value / 2000, 0.15)) },
+      { scale: scale.value * (1 - Math.min(Math.max(drag.value, 0) / 2000, 0.15)) },
     ],
   }));
 

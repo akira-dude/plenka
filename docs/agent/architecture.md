@@ -50,7 +50,7 @@ src/app (routes, screens)
 
 - `PhotoFrame`: feed frame ratio is clamped to 3:4…16:9. In the feed (`fit="cover"`) a photo outside that range fills the frame and is cropped along its long side, display only. Never crop the file.
 - Post view (`fit="whole"`): frame ratio comes from the first photo, clamped so it takes at most ~72% of the screen height; other photos are shown whole over a blurred copy of their thumbnail. Tap opens the full-screen viewer.
-- Viewer (`ZoomableImage`): pinch 1–5x, pan when zoomed, double tap 2.5x / reset, vertical swipe down when not zoomed closes the viewer (horizontal moves fail the pan so the pager scrolls); react-native-gesture-handler v3 hooks with `runOnJS: true`.
+- Viewer (`ZoomableImage`): pinch 1–5x, pan when zoomed, double tap 2.5x / reset, vertical swipe down when not zoomed closes the viewer, swipe up shares the photo (horizontal moves fail the pan so the pager scrolls); react-native-gesture-handler v3 hooks with `runOnJS: true`.
 - Grid and calendar use square-cropped thumbnails only.
 
 ## Screens
@@ -87,3 +87,7 @@ Screens reload their data on focus via `useDbQuery`; there is no global store.
 - Triggers (`useAutoSync`, mounted in the root layout): app start, app back to foreground, network reconnect; plus `syncNow` after save/delete. No background task yet.
 - Restore (`restoreFromDrive`): walk the `Плёнка` folder, download files missing locally, `rebuildIndex`, mark everything as synced. Existing local files are never overwritten.
 - UI state lives in a module store (`useSyncState`): account, running, done/total, queued, last sync, error.
+
+## Sharing
+
+`src/device/share.ts` → `sharePhoto(uri)`: renders the stored image to a temporary JPEG (0.92) in the cache and opens the system share sheet via `expo-sharing`. JPEG instead of WebP because messengers may turn a WebP into a sticker. Only the previous temp file is kept and replaced on the next share. Entry points: share icon in the post header (current pager photo), share button and swipe up in the viewer. The `expo-sharing` config plugin is listed in `app.json` with defaults; receiving shares from other apps stays disabled (`android.enabled` is false by default) — do not enable it without a request.
