@@ -11,7 +11,12 @@ type Props = {
   counts: Map<string, number>;
   onSelect: (month: string | null) => void;
   onClose: () => void;
+  max?: string;
+  allowEmpty?: boolean;
+  showAll?: boolean;
 };
+
+const YEARS_BACK = 20;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -21,21 +26,21 @@ function initialYear(value: string | null, counts: Map<string, number>): number 
   return latest ? Number(latest.slice(0, 4)) : new Date().getFullYear();
 }
 
-export function MonthPicker({ visible, value, counts, onSelect, onClose }: Props) {
+export function MonthPicker({ visible, ...props }: Props) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      {visible && <Sheet value={value} counts={counts} onSelect={onSelect} onClose={onClose} />}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={props.onClose} statusBarTranslucent>
+      {visible && <Sheet {...props} />}
     </Modal>
   );
 }
 
-function Sheet({ value, counts, onSelect, onClose }: Omit<Props, 'visible'>) {
+function Sheet({ value, counts, onSelect, onClose, max, allowEmpty = false, showAll = true }: Omit<Props, 'visible'>) {
   const styles = useStyles(makeStyles);
   const { colors } = useTheme();
   const [year, setYear] = useState(() => initialYear(value, counts));
   const years = [...counts.keys()].map((k) => Number(k.slice(0, 4)));
-  const minYear = Math.min(year, ...years);
-  const maxYear = Math.max(year, ...years);
+  const maxYear = max ? Number(max.slice(0, 4)) : Math.max(year, ...years);
+  const minYear = allowEmpty ? Math.min(year, ...years, maxYear - YEARS_BACK) : Math.min(year, ...years);
 
   const choose = (month: string | null) => {
     onSelect(month);
@@ -61,14 +66,24 @@ function Sheet({ value, counts, onSelect, onClose }: Omit<Props, 'visible'>) {
             const key = `${year}-${pad(i + 1)}`;
             const count = counts.get(key) ?? 0;
             const on = key === value;
+            const disabled = (max !== undefined && key > max) || (!allowEmpty && count === 0);
             return (
               <Pressable
                 key={key}
                 style={[styles.month, on && styles.monthOn]}
-                disabled={count === 0}
+                disabled={disabled}
                 onPress={() => choose(key)}
               >
-                <Text style={[styles.monthText, count > 0 && styles.monthTextHas, on && styles.monthTextOn]}>{label}</Text>
+                <Text
+                  style={[
+                    styles.monthText,
+                    !disabled && styles.monthTextFree,
+                    count > 0 && styles.monthTextHas,
+                    on && styles.monthTextOn,
+                  ]}
+                >
+                  {label}
+                </Text>
                 <Text style={[styles.count, on && styles.monthTextOn]}>{count > 0 ? count : ' '}</Text>
               </Pressable>
             );
@@ -76,9 +91,11 @@ function Sheet({ value, counts, onSelect, onClose }: Omit<Props, 'visible'>) {
         </View>
 
         <View style={styles.actions}>
-          <Pressable style={styles.action} onPress={() => choose(null)}>
-            <Text style={styles.actionText}>Все месяцы</Text>
-          </Pressable>
+          {showAll && (
+            <Pressable style={styles.action} onPress={() => choose(null)}>
+              <Text style={styles.actionText}>Все месяцы</Text>
+            </Pressable>
+          )}
           <Pressable style={styles.action} onPress={onClose}>
             <Text style={styles.actionText}>Отмена</Text>
           </Pressable>
@@ -100,6 +117,7 @@ const makeStyles = (c: Palette) =>
     month: { width: '33.33%', alignItems: 'center', paddingVertical: 10, borderRadius: 99 },
     monthOn: { backgroundColor: c.accent },
     monthText: { fontSize: 16, color: c.faint },
+    monthTextFree: { color: c.ink },
     monthTextHas: { color: c.ink, fontWeight: '700' },
     monthTextOn: { color: c.onAccent },
     count: { fontFamily: fonts.mono, fontSize: 11, color: c.muted },

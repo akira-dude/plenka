@@ -11,6 +11,7 @@ import { countPosts, rebuildIndex } from '@/storage/posts';
 import { getPhotoQuality, getWifiOnly, setPhotoQuality, setWifiOnly, type PhotoQuality } from '@/storage/settings';
 import { connect, describeAuthError, disconnect } from '@/sync/auth';
 import { refreshSyncState, resendAll, restoreFromDrive, syncNow, useSyncState } from '@/sync/engine';
+import { AppUpdates } from '@/ui/AppUpdates';
 import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -134,6 +135,9 @@ export default function Settings() {
             </Text>
           </View>
         )}
+
+        <Text style={styles.section}>Приложение</Text>
+        <AppUpdates />
 
         <Text style={styles.section}>Обслуживание</Text>
         <Text style={styles.note}>

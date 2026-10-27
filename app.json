@@ -3,7 +3,7 @@
     "name": "Плёнка",
     "slug": "plenka",
     "scheme": "plenka",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -65,6 +65,12 @@
         "projectId": "2143c61d-bdcc-4d7f-8c50-f422984e33c1"
       }
     },
-    "owner": "akira-dude"
+    "owner": "akira-dude",
+    "updates": {
+      "url": "https://u.expo.dev/2143c61d-bdcc-4d7f-8c50-f422984e33c1"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    }
   }
 }

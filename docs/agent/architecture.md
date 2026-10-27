@@ -58,7 +58,7 @@ src/app (routes, screens)
 | Route | File | Notes |
 | --- | --- | --- |
 | Feed | `src/app/(tabs)/index.tsx` | Paged: `listFeedPage(month, limit)` loads 30 more on scroll end (on focus it reloads the same count, so scroll stays); month counts come from a separate `GROUP BY` query; the list `key` includes the month, so a month change remounts it at the top. Cards (`PostCard`, memoized) have a lazy photo pager (`initialNumToRender=1`, `windowSize=3`) with the thumbnail as placeholder. Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
-| Archive | `src/app/(tabs)/archive.tsx` | Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
+| Archive | `src/app/(tabs)/archive.tsx` | Months after the current one are blocked (right arrow disabled, picker `max`). Tapping the month title opens `MonthPicker` with `allowEmpty`, `max` and no «Все месяцы». Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
 | Search | `src/app/(tabs)/search.tsx` | Empty query → tag cloud: equal blue chips «#tag count», most used first (the user rejected size-by-count). Typing → tag suggestions + text/tag/place search over the `search` column; `#tag` (also set by tapping a tag) → exact tag search. Results (`SearchResult`) show tags and highlight the matched words |
 | Settings | `src/app/(tabs)/settings.tsx` | Drive status (placeholder), theme, photo quality, storage usage, rebuild index |
@@ -114,3 +114,7 @@ Edge-to-edge: the app draws under the Android navigation buttons. `expo-navigati
 Phones are roughly 3–5x slower. FTS5 trigram was measured at ~4 ms but not adopted: plain `LIKE` is within budget and FTS5 availability in the bundled SQLite is not guaranteed. Revisit if the no-match search gets slow. Benchmark script idea: build the same schema in `node:sqlite` with synthetic rows and time the exact SQL.
 
 Screens outside the tab bar (compose, post, map) add `useSafeAreaInsets().bottom` to their bottom padding: the app is edge-to-edge and the system buttons overlay content.
+
+## Updates
+
+`expo-updates` with `updates.url` of the EAS project, channel `preview` (set in `eas.json` build profile), `runtimeVersion.policy = fingerprint`. Default behaviour: check on launch, download in the background, apply on the next cold start. `src/ui/AppUpdates.tsx` (Settings → «Приложение») shows the app version and whether the running JS is embedded or an update, and offers «Проверить обновления» / «Перезапустить и обновить» via `useUpdates`, `checkForUpdateAsync`, `fetchUpdateAsync`, `reloadAsync`.

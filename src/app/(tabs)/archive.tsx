@@ -16,8 +16,9 @@ import {
   shiftMonth,
 } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
-import { listDays, type IndexedPost } from '@/storage/posts';
+import { listDays, monthCounts, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
+import { MonthPicker } from '@/ui/MonthPicker';
 import { PostRow } from '@/ui/PostRow';
 import { fonts, space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
@@ -37,8 +38,13 @@ export default function Archive() {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [selected, setSelected] = useState(today);
 
+  const [picking, setPicking] = useState(false);
+  const current = today.slice(0, 7);
+  const atLatest = month >= current;
+
   const query = useCallback((db: SQLiteDatabase) => listDays(db, `${month}-01`, `${month}-31`), [month]);
   const { data } = useDbQuery(query, []);
+  const { data: counts } = useDbQuery(monthCounts, new Map<string, number>());
 
   const byDay = useMemo(() => {
     const map = new Map<string, IndexedPost[]>();
@@ -52,10 +58,10 @@ export default function Archive() {
   const rows = useMemo(() => weeks(monthCells(month)), [month]);
   const dayPosts = byDay.get(selected) ?? [];
 
-  const goMonth = (delta: number) => {
-    const next = shiftMonth(month, delta);
-    setMonth(next);
-    setSelected(next === today.slice(0, 7) ? today : `${next}-01`);
+  const openMonth = (next: string) => {
+    const clamped = next > current ? current : next;
+    setMonth(clamped);
+    setSelected(clamped === current ? today : `${clamped}-01`);
   };
 
   return (
@@ -64,15 +70,32 @@ export default function Archive() {
         <View style={styles.header}>
           <Text style={styles.title}>Архив</Text>
           <View style={styles.monthNav}>
-            <Pressable style={styles.navButton} hitSlop={8} onPress={() => goMonth(-1)}>
+            <Pressable style={styles.navButton} hitSlop={8} onPress={() => openMonth(shiftMonth(month, -1))}>
               <Feather name="chevron-left" size={20} color={colors.ink} />
             </Pressable>
-            <Text style={styles.month}>{monthTitle(month)}</Text>
-            <Pressable style={styles.navButton} hitSlop={8} onPress={() => goMonth(1)}>
-              <Feather name="chevron-right" size={20} color={colors.ink} />
+            <Pressable style={styles.monthButton} onPress={() => setPicking(true)} accessibilityLabel="Выбрать месяц">
+              <Text style={styles.month}>{monthTitle(month)}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.navButton}
+              hitSlop={8}
+              disabled={atLatest}
+              onPress={() => openMonth(shiftMonth(month, 1))}
+            >
+              <Feather name="chevron-right" size={20} color={atLatest ? colors.faint : colors.ink} />
             </Pressable>
           </View>
         </View>
+        <MonthPicker
+          visible={picking}
+          value={month}
+          counts={counts}
+          max={current}
+          allowEmpty
+          showAll={false}
+          onSelect={(m) => m && openMonth(m)}
+          onClose={() => setPicking(false)}
+        />
 
         <View style={styles.calendar}>
           <View style={styles.week}>
@@ -140,6 +163,7 @@ const makeStyles = (c: Palette) =>
     title: { fontSize: 24, fontWeight: '800', color: c.ink },
     monthNav: { flexDirection: 'row', alignItems: 'center' },
     navButton: { padding: 8 },
+    monthButton: { paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8, backgroundColor: c.photoBg },
     month: { fontFamily: fonts.mono, fontSize: 13, color: c.ink, minWidth: 110, textAlign: 'center' },
     calendar: { gap: CELL_GAP },
     week: { flexDirection: 'row', gap: CELL_GAP },
