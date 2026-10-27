@@ -69,3 +69,5 @@ Run typecheck, lint and the bundle export before calling a task done: the export
 ## Keep docs current
 
 When a change moves files, adds a module, changes the post format or finishes a roadmap item, update `AGENTS.md` / `docs/agent/*` in the same change. One fact — one place; link instead of copying.
+
+The roadmap (`docs/agent/roadmap.md`) is part of every change: a finished item is deleted from it, a plan the user adds, changes or drops is written there the same turn, and every item stays tagged OTA or APK. Its own rules are at the top of the file.
