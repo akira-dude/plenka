@@ -162,9 +162,18 @@ class Remote {
     await this.remember(path, id);
   }
 
-  async trashTree(path: string): Promise<void> {
+  async lookupFolder(path: string): Promise<string | null> {
+    if (path === '') return this.rootId(false);
     const known = await this.mapping(path);
-    if (known) await this.drive.trash(known.drive_id);
+    if (known) return known.drive_id;
+    const parentId = await this.lookupFolder(parentOf(path));
+    if (!parentId) return null;
+    return (await this.drive.findChild(parentId, nameOf(path), true))?.id ?? null;
+  }
+
+  async trashTree(path: string): Promise<void> {
+    const id = await this.lookupFolder(path);
+    if (id) await this.drive.trash(id);
     await this.forgetTree(path);
   }
 

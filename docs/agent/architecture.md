@@ -60,7 +60,7 @@ src/app (routes, screens)
 | Feed | `src/app/(tabs)/index.tsx` | Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
-| Search | `src/app/(tabs)/search.tsx` | Text / tag / place search over the `search` column |
+| Search | `src/app/(tabs)/search.tsx` | Empty query → tag cloud (size by count). Typing → tag suggestions + text/tag/place search over the `search` column; `#tag` (also set by tapping a tag) → exact tag search. Results (`SearchResult`) show tags and highlight the matched words |
 | Settings | `src/app/(tabs)/settings.tsx` | Drive status (placeholder), theme, photo quality, storage usage, rebuild index |
 | Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately). Per-post photo quality switch (defaults to the setting, applies to photos added in this session only). `KeyboardAwareScrollView` + «Сохранить» in the header so the keyboard never hides the action |
 | Post | `src/app/post/[id].tsx` | Pager, text, tags, place link → map; header: edit, delete (red) |
@@ -91,3 +91,11 @@ Screens reload their data on focus via `useDbQuery`; there is no global store.
 ## Sharing
 
 `src/device/share.ts` → `sharePhoto(uri)`: renders the stored image to a temporary JPEG (0.92) in the cache and opens the system share sheet via `expo-sharing`. JPEG instead of WebP because messengers may turn a WebP into a sticker. Only the previous temp file is kept and replaced on the next share. Entry points: share icon in the post header (current pager photo), share button and swipe up in the viewer. The `expo-sharing` config plugin is listed in `app.json` with defaults; receiving shares from other apps stays disabled (`android.enabled` is false by default) — do not enable it without a request.
+
+## System navigation bar
+
+Edge-to-edge: the app draws under the Android navigation buttons. `expo-navigation-bar` plugin has `enforceContrast: false`, so Android does not paint its grey scrim and the tab bar colour shows behind the buttons. Watch out: the native `setStyle` treats `"dark"` as dark buttons on a light background (`hasLightBackground = style == "dark"`), the opposite of its TypeScript doc comment; the root layout passes `scheme === 'dark' ? 'light' : 'dark'`. The viewer forces light buttons over its black background.
+
+## Tags
+
+`listTags` counts tags over non-deleted posts. `TagSuggestions` (compose under the tags field, search under the query) shows the most used tags when the current word is empty and prefix/contains matches while typing; picking replaces the word being typed.

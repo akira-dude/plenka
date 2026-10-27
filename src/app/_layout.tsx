@@ -34,7 +34,7 @@ function Navigation() {
       }}
     >
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <NavigationBar style={scheme === 'dark' ? 'dark' : 'light'} />
+      <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerShadowVisible: false,

@@ -15,13 +15,13 @@ import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const QUALITY_OPTIONS: { value: PhotoQuality; title: string; hint: string }[] = [
+  { value: 'original', title: 'Оригинал', hint: 'Файл сохраняется как снят, байт в байт. Примерно 3–6 МБ на фото.' },
   { value: 'visual', title: 'Без видимых потерь', hint: 'WebP 90, полное разрешение, пропорции как у снимка. Примерно 1,5–3 МБ на фото.' },
   {
     value: 'compact',
     title: 'Экономия места',
     hint: 'WebP 85, длинная сторона до 1600 px, пропорции сохраняются. Примерно 0,3–0,5 МБ на фото: для экрана телефона и компьютера хватает, для печати и сильного зума нет.',
   },
-  { value: 'original', title: 'Оригинал', hint: 'Файл сохраняется как снят, байт в байт. Примерно 3–6 МБ на фото.' },
 ];
 
 const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
@@ -66,10 +66,10 @@ export default function Settings() {
     setBusy(true);
     try {
       const n = await rebuildIndex(db);
-      Alert.alert('Индекс пересобран', `Найдено записей: ${n}.`);
+      Alert.alert('Список пересобран', `Найдено записей: ${n}.`);
       reload();
     } catch (e) {
-      Alert.alert('Не удалось пересобрать индекс', e instanceof Error ? e.message : String(e));
+      Alert.alert('Не удалось пересобрать список', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -136,8 +136,13 @@ export default function Settings() {
         )}
 
         <Text style={styles.section}>Обслуживание</Text>
+        <Text style={styles.note}>
+          Лента, календарь и поиск берут записи из быстрого списка, а сами записи лежат в папках с фото. Если запись
+          есть в папке, но пропала из ленты, или номера и поиск ведут себя странно, пересобери список. Он заново
+          прочитает все папки. Фото и тексты при этом не меняются и никуда не отправляются.
+        </Text>
         <Pressable style={styles.button} onPress={rebuild} disabled={busy}>
-          {busy ? <ActivityIndicator color={colors.ink} /> : <Text style={styles.buttonText}>Пересобрать индекс из файлов</Text>}
+          {busy ? <ActivityIndicator color={colors.ink} /> : <Text style={styles.buttonText}>Пересобрать список записей</Text>}
         </Pressable>
       </ScrollView>
     </SafeAreaView>

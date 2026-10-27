@@ -2,6 +2,7 @@ import { Directory, File } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { dayKey, toLocalIso } from '@/domain/dates';
 import { POST_FORMAT, parsePost, type MediaItem, type Place, type Post } from '@/domain/post';
+import { countTags, searchWords, tagQuery, type TagCount } from '@/domain/search';
 import { ulid } from '@/domain/ulid';
 import { migrate } from './db';
 import { deleteIfExists, moveTree, readJson, writeJsonAtomic } from './files';
@@ -68,8 +69,21 @@ export async function getStored(db: SQLiteDatabase, id: string): Promise<{ post:
   return row ? { post: JSON.parse(row.json) as Post, dir: row.dir } : null;
 }
 
+export async function listTags(db: SQLiteDatabase): Promise<TagCount[]> {
+  const rows = await db.getAllAsync<{ tags: string }>("SELECT tags FROM posts WHERE deleted = 0 AND tags != ''");
+  return countTags(rows.map((r) => r.tags.split(' ').filter(Boolean)));
+}
+
 export async function searchPosts(db: SQLiteDatabase, query: string): Promise<IndexedPost[]> {
-  const words = query.toLowerCase().split(/\s+/).map((w) => w.replace(/^#/, '')).filter(Boolean);
+  const tag = tagQuery(query);
+  if (tag) {
+    const rows = await db.getAllAsync<Row>(
+      `SELECT json, dir, frame FROM ${NUMBERED} WHERE id IN (SELECT id FROM posts WHERE (' ' || tags || ' ') LIKE ?) ORDER BY created_at DESC`,
+      `% ${tag} %`,
+    );
+    return rows.map(toIndexed);
+  }
+  const words = searchWords(query);
   if (words.length === 0) return [];
   const clause = words.map(() => 'search LIKE ?').join(' AND ');
   const params = words.map((w) => `%${w}%`);

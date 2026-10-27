@@ -10,11 +10,13 @@ import Feather from '@expo/vector-icons/Feather';
 import { currentCoords, formatCoords, placeName, type Coords } from '@/device/location';
 import { formatDateTime, parseDayKey, parseExifDate, parseExifGps } from '@/domain/dates';
 import { parseTags, type MediaItem } from '@/domain/post';
+import { replaceFragment, suggestTags, type TagCount } from '@/domain/search';
 import { mediaUri } from '@/storage/paths';
 import type { PickedPhoto } from '@/storage/photos';
-import { getPost, savePost } from '@/storage/posts';
+import { getPost, listTags, savePost } from '@/storage/posts';
 import { getPhotoQuality, type PhotoQuality } from '@/storage/settings';
 import { syncNow } from '@/sync/engine';
+import { TagSuggestions } from '@/ui/TagSuggestions';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -24,9 +26,9 @@ type CoordsSource = 'post' | 'photo' | 'device';
 const THUMB = 76;
 
 const QUALITY_LABELS: { value: PhotoQuality; label: string; hint: string }[] = [
+  { value: 'original', label: 'Оригинал', hint: 'Файл как снят, примерно 3–6 МБ на фото.' },
   { value: 'visual', label: 'Без потерь', hint: 'Полное разрешение, примерно 1,5–3 МБ на фото.' },
   { value: 'compact', label: 'Эконом', hint: 'До 1600 px по длинной стороне, примерно 0,3–0,5 МБ на фото.' },
-  { value: 'original', label: 'Оригинал', hint: 'Файл как снят, примерно 3–6 МБ на фото.' },
 ];
 
 function initialDate(day?: string): Date {
@@ -58,8 +60,11 @@ export default function Compose() {
   const [saving, setSaving] = useState(false);
   const [quality, setQuality] = useState<PhotoQuality | null>(null);
 
+  const [allTags, setAllTags] = useState<TagCount[]>([]);
+
   useEffect(() => {
     getPhotoQuality(db).then((q) => setQuality((prev) => prev ?? q));
+    listTags(db).then(setAllTags);
   }, [db]);
   const dateFixed = useRef(Boolean(params.date) || editing);
   const coordsSource = useRef<CoordsSource | null>(null);
@@ -254,6 +259,24 @@ export default function Compose() {
           </Pressable>
         </ScrollView>
 
+        <View style={styles.qualityBlock}>
+          <Text style={styles.label}>Качество новых фото в этой записи</Text>
+          <View style={styles.segment}>
+            {QUALITY_LABELS.map((o) => {
+              const on = quality === o.value;
+              return (
+                <Pressable key={o.value} style={[styles.segItem, on && styles.segOn]} onPress={() => setQuality(o.value)}>
+                  <Text style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.note}>
+            {QUALITY_LABELS.find((o) => o.value === quality)?.hint ?? ''}
+            {editing && keep.length > 0 ? ' Уже сохранённые фото не пересжимаются.' : ''}
+          </Text>
+        </View>
+
         <Pressable style={[styles.field, styles.row]} onPress={editDate}>
           <Feather name="calendar" size={16} color={colors.ink} />
           <Text style={styles.fieldText}>{formatDateTime(date)}</Text>
@@ -318,24 +341,10 @@ export default function Compose() {
             autoCapitalize="none"
           />
         </View>
-
-        <View style={styles.qualityBlock}>
-          <Text style={styles.label}>Качество новых фото в этой записи</Text>
-          <View style={styles.segment}>
-            {QUALITY_LABELS.map((o) => {
-              const on = quality === o.value;
-              return (
-                <Pressable key={o.value} style={[styles.segItem, on && styles.segOn]} onPress={() => setQuality(o.value)}>
-                  <Text style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={styles.note}>
-            {QUALITY_LABELS.find((o) => o.value === quality)?.hint ?? ''}
-            {editing && keep.length > 0 ? ' Уже сохранённые фото не пересжимаются.' : ''}
-          </Text>
-        </View>
+        <TagSuggestions
+          tags={suggestTags(allTags, tags, parseTags(tags))}
+          onPick={(tag) => setTags((prev) => replaceFragment(prev, tag))}
+        />
 
         <Text style={styles.note}>Запись сохраняется на телефон сразу, интернет не нужен.</Text>
 

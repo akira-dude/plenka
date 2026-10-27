@@ -14,13 +14,14 @@ Details are read on demand: `docs/agent/INDEX.md`.
 | Path | What |
 | --- | --- |
 | `src/app/` | Expo Router routes only. `(tabs)/` = bottom tabs (feed, archive, camera, search, settings), `compose.tsx` = new/edit post, `post/[id].tsx` = post view, `viewer/[id].tsx` = full-screen zoom, `map.tsx` = map of posts |
-| `src/domain/` | Pure logic, no React / Expo UI: `post.ts` (format types, parsing), `dates.ts` (ru formatting, local ISO, calendar), `ulid.ts` |
+| `src/domain/` | Pure logic, no React / Expo UI: `post.ts` (format types, parsing), `dates.ts` (ru formatting, local ISO, calendar), `search.ts` (search words, `#tag` queries, tag counts and suggestions, highlight, snippet), `ulid.ts` |
 | `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
 | `src/ui/` | Shared components, `theme.ts` (light/dark palettes), `ThemeProvider.tsx` (`useTheme`, `useStyles`), `mapHtml.ts` (Leaflet page for the map WebView) |
 | `src/device/` | Device services: `location.ts` (GPS, reverse geocoding), `share.ts` (send one photo as JPEG through the system share sheet) |
 | `src/sync/` | Google Drive backup: `auth.ts` (Google sign-in, web client id), `drive.ts` (REST v3 client), `engine.ts` (outbox → Drive, restore, `useSyncState`), `useAutoSync.ts` (triggers) |
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |
+| `assets/` | App icon set (full icon, adaptive foreground/background, monochrome, splash, favicon). Generated from simple SVG shapes (film frame + sun + hills on the accent blue); regenerate all files together if the logo changes |
 | `docs/agent/` | Architecture, data format contract, roadmap |
 | `docs/index.html`, `docs/privacy.html`, `docs/site.css` | Public GitHub Pages site (`https://akira-dude.github.io/plenka/`): home page and privacy policy required by the Google OAuth consent screen. Update the privacy policy when the app starts collecting or sending new data |
 

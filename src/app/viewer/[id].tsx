@@ -3,6 +3,8 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { NavigationBar } from 'expo-navigation-bar';
+import { StatusBar } from 'expo-status-bar';
 import Feather from '@expo/vector-icons/Feather';
 import { sharePhoto } from '@/device/share';
 import { useDbQuery } from '@/hooks/useDbQuery';
@@ -34,6 +36,8 @@ export default function Viewer() {
 
   return (
     <View style={styles.screen}>
+      <StatusBar style="light" />
+      <NavigationBar style="light" />
       {data && (
         <FlatList
           data={media}
