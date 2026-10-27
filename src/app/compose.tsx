@@ -197,7 +197,7 @@ export default function Compose() {
 
   const empty = keep.length === 0 && added.length === 0 && !text.trim();
 
-  const ceiling = editing ? bestQuality(keep) : null;
+  const ceiling = editing && added.length === 0 ? bestQuality(keep) : null;
   const qualityOptions = ceiling ? QUALITY_LABELS.filter((o) => !isLowerQuality(ceiling, o.value)) : QUALITY_LABELS;
   const chosen = quality && ceiling && isLowerQuality(ceiling, quality) ? ceiling : quality;
   const recompress = chosen !== null && keep.some((m) => isLowerQuality(chosen, mediaQuality(m)));
