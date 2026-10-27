@@ -25,11 +25,19 @@ type Row = { json: string; dir: string; frame: number };
 
 const toIndexed = (row: Row): IndexedPost => ({ post: JSON.parse(row.json) as Post, dir: row.dir, frame: row.frame });
 
-const NUMBERED = `(
-  SELECT json, dir, day, created_at, id, search,
-    ROW_NUMBER() OVER (ORDER BY created_at, id) AS frame
-  FROM posts WHERE deleted = 0
-)`;
+const FIELDS = 'SELECT json, dir, seq AS frame FROM posts WHERE deleted = 0';
+const SEARCH_LIMIT = 200;
+
+export type FeedPage = { items: IndexedPost[]; hasMore: boolean };
+
+async function renumber(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync(
+    `UPDATE posts SET seq = r.n
+     FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id) AS n FROM posts WHERE deleted = 0) AS r
+     WHERE posts.id = r.id AND posts.seq != r.n`,
+  );
+  await db.runAsync('UPDATE posts SET seq = 0 WHERE deleted = 1 AND seq != 0');
+}
 
 export async function initStorage(db: SQLiteDatabase): Promise<void> {
   await migrate(db);
@@ -39,20 +47,40 @@ export async function initStorage(db: SQLiteDatabase): Promise<void> {
   if (!manifest.exists) {
     await writeJsonAtomic(root, 'manifest.json', { format: POST_FORMAT, app: 'plenka', createdAt: toLocalIso(new Date()) });
   }
-  const count = await db.getFirstAsync<{ n: number; stale: number }>(
-    "SELECT COUNT(*) AS n, SUM(search = '' AND deleted = 0) AS stale FROM posts",
+  const count = await db.getFirstAsync<{ n: number; stale: number; unnumbered: number }>(
+    "SELECT COUNT(*) AS n, SUM(search = '' AND deleted = 0) AS stale, SUM(seq = 0 AND deleted = 0) AS unnumbered FROM posts",
   );
   if (!count?.n || count.stale) await rebuildIndex(db);
+  else if (count.unnumbered) await renumber(db);
 }
 
 export async function listFeed(db: SQLiteDatabase): Promise<IndexedPost[]> {
-  const rows = await db.getAllAsync<Row>(`SELECT json, dir, frame FROM ${NUMBERED} ORDER BY created_at DESC, id DESC`);
+  const rows = await db.getAllAsync<Row>(`${FIELDS} ORDER BY created_at DESC, id DESC`);
   return rows.map(toIndexed);
+}
+
+export async function listFeedPage(db: SQLiteDatabase, month: string | null, limit: number): Promise<FeedPage> {
+  const rows = month
+    ? await db.getAllAsync<Row>(
+        `${FIELDS} AND day BETWEEN ? AND ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+        `${month}-01`,
+        `${month}-31`,
+        limit + 1,
+      )
+    : await db.getAllAsync<Row>(`${FIELDS} ORDER BY created_at DESC, id DESC LIMIT ?`, limit + 1);
+  return { items: rows.slice(0, limit).map(toIndexed), hasMore: rows.length > limit };
+}
+
+export async function monthCounts(db: SQLiteDatabase): Promise<Map<string, number>> {
+  const rows = await db.getAllAsync<{ ym: string; n: number }>(
+    'SELECT substr(day, 1, 7) AS ym, COUNT(*) AS n FROM posts WHERE deleted = 0 GROUP BY ym',
+  );
+  return new Map(rows.map((r) => [r.ym, r.n]));
 }
 
 export async function listDays(db: SQLiteDatabase, from: string, to: string): Promise<IndexedPost[]> {
   const rows = await db.getAllAsync<Row>(
-    `SELECT json, dir, frame FROM ${NUMBERED} WHERE day BETWEEN ? AND ? ORDER BY created_at, id`,
+    `${FIELDS} AND day BETWEEN ? AND ? ORDER BY created_at, id`,
     from,
     to,
   );
@@ -60,7 +88,7 @@ export async function listDays(db: SQLiteDatabase, from: string, to: string): Pr
 }
 
 export async function getPost(db: SQLiteDatabase, id: string): Promise<IndexedPost | null> {
-  const row = await db.getFirstAsync<Row>(`SELECT json, dir, frame FROM ${NUMBERED} WHERE id = ?`, id);
+  const row = await db.getFirstAsync<Row>(`${FIELDS} AND id = ?`, id);
   return row ? toIndexed(row) : null;
 }
 
@@ -78,25 +106,23 @@ export async function searchPosts(db: SQLiteDatabase, query: string): Promise<In
   const tag = tagQuery(query);
   if (tag) {
     const rows = await db.getAllAsync<Row>(
-      `SELECT json, dir, frame FROM ${NUMBERED} WHERE id IN (SELECT id FROM posts WHERE (' ' || tags || ' ') LIKE ?) ORDER BY created_at DESC`,
+      `${FIELDS} AND (' ' || tags || ' ') LIKE ? ORDER BY created_at DESC, id DESC LIMIT ?`,
       `% ${tag} %`,
+      SEARCH_LIMIT,
     );
     return rows.map(toIndexed);
   }
   const words = searchWords(query);
   if (words.length === 0) return [];
   const clause = words.map(() => 'search LIKE ?').join(' AND ');
-  const params = words.map((w) => `%${w}%`);
-  const rows = await db.getAllAsync<Row>(
-    `SELECT json, dir, frame FROM ${NUMBERED} WHERE ${clause} ORDER BY created_at DESC LIMIT 200`,
-    params,
-  );
+  const params = [...words.map((w) => `%${w}%`), SEARCH_LIMIT];
+  const rows = await db.getAllAsync<Row>(`${FIELDS} AND ${clause} ORDER BY created_at DESC, id DESC LIMIT ?`, params);
   return rows.map(toIndexed);
 }
 
 export async function listWithCoords(db: SQLiteDatabase): Promise<IndexedPost[]> {
   const rows = await db.getAllAsync<Row>(
-    `SELECT json, dir, frame FROM ${NUMBERED} WHERE json_extract(json, '$.place.lat') IS NOT NULL ORDER BY created_at`,
+    `${FIELDS} AND json_extract(json, '$.place.lat') IS NOT NULL ORDER BY created_at`,
   );
   return rows.map(toIndexed);
 }
@@ -128,6 +154,7 @@ async function commit(db: SQLiteDatabase, post: Post, dir: string): Promise<void
   await writeJsonAtomic(dirOf(dir), 'post.json', post);
   await db.withTransactionAsync(async () => {
     await indexPost(db, post, dir);
+    await renumber(db);
     await db.runAsync(
       'INSERT OR REPLACE INTO outbox (post_id, rev, queued_at) VALUES (?, ?, ?)',
       post.id,
@@ -218,6 +245,7 @@ export async function rebuildIndex(db: SQLiteDatabase): Promise<number> {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM posts');
     for (const { post, dir } of found) await indexPost(db, post, dir);
+    await renumber(db);
   });
   return found.filter((f) => !f.post.deleted).length;
 }

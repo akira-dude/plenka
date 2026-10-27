@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, SectionList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, SectionList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
 import { monthTitle } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
-import { listFeed, type IndexedPost } from '@/storage/posts';
+import { listFeedPage, monthCounts, type FeedPage, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
 import { useSyncState } from '@/sync/engine';
 import { MonthPicker } from '@/ui/MonthPicker';
@@ -15,39 +16,62 @@ import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
 const GRID_GAP = 2;
+const PAGE_SIZE = 30;
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+type FeedData = { page: FeedPage; counts: Map<string, number> };
 
 export default function Feed() {
   const styles = useStyles(makeStyles);
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
-  const { data } = useDbQuery(listFeed, []);
   const [grid, setGrid] = useState(false);
   const [month, setMonth] = useState<string | null>(null);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [picking, setPicking] = useState(false);
   const sync = useSyncState();
   const cardWidth = width - space.gutter * 2;
   const cell = (cardWidth - GRID_GAP * 2) / 3;
 
-  const allSections = useMemo(() => {
+  const query = useCallback(
+    async (db: SQLiteDatabase): Promise<FeedData> => ({
+      page: await listFeedPage(db, month, limit),
+      counts: await monthCounts(db),
+    }),
+    [month, limit],
+  );
+  const { data } = useDbQuery<FeedData | null>(query, null);
+  const items = useMemo(() => data?.page.items ?? [], [data]);
+  const counts = useMemo(() => data?.counts ?? new Map<string, number>(), [data]);
+  const total = useMemo(() => [...counts.values()].reduce((a, b) => a + b, 0), [counts]);
+  const hasMore = data?.page.hasMore ?? false;
+
+  const sections = useMemo(() => {
     const byMonth = new Map<string, IndexedPost[]>();
-    for (const item of data) {
+    for (const item of items) {
       const key = item.post.createdAt.slice(0, 7);
       byMonth.set(key, [...(byMonth.get(key) ?? []), item]);
     }
-    return [...byMonth].map(([key, items]) => ({ key, data: items }));
-  }, [data]);
+    return [...byMonth].map(([key, list]) => ({ key, data: list }));
+  }, [items]);
 
-  const counts = useMemo(() => new Map(allSections.map((s) => [s.key, s.data.length])), [allSections]);
-  const activeMonth = month && counts.has(month) ? month : null;
-  const sections = activeMonth ? allSections.filter((s) => s.key === activeMonth) : allSections;
-  const visible = useMemo(() => sections.flatMap((s) => s.data), [sections]);
+  const chooseMonth = (next: string | null) => {
+    setMonth(next);
+    setLimit(PAGE_SIZE);
+  };
+
+  const loadMore = () => {
+    if (hasMore && items.length >= limit) setLimit((l) => l + PAGE_SIZE);
+  };
 
   const renderCard = useCallback(
     ({ item }: { item: IndexedPost }) => <PostCard item={item} width={cardWidth} />,
     [cardWidth],
   );
+
+  const footer = hasMore ? <ActivityIndicator style={styles.more} color={colors.muted} /> : undefined;
+  const listKey = `${grid ? 'grid' : 'list'}-${month ?? 'all'}`;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -75,17 +99,17 @@ export default function Feed() {
           );
         })}
       </View>
-      {allSections.length > 0 && (
+      {total > 0 && (
         <View style={styles.filterRow}>
-          <Pressable style={[styles.select, activeMonth && styles.selectOn]} onPress={() => setPicking(true)}>
-            <Feather name="calendar" size={15} color={activeMonth ? colors.accent : colors.muted} />
-            <Text style={[styles.selectText, activeMonth && styles.selectTextOn]} numberOfLines={1}>
-              {activeMonth ? capitalize(monthTitle(activeMonth)) : 'Все месяцы'} · {visible.length}
+          <Pressable style={[styles.select, month && styles.selectOn]} onPress={() => setPicking(true)}>
+            <Feather name="calendar" size={15} color={month ? colors.accent : colors.muted} />
+            <Text style={[styles.selectText, month && styles.selectTextOn]} numberOfLines={1}>
+              {month ? capitalize(monthTitle(month)) : 'Все месяцы'} · {month ? (counts.get(month) ?? 0) : total}
             </Text>
-            <Feather name="chevron-down" size={16} color={activeMonth ? colors.accent : colors.muted} />
+            <Feather name="chevron-down" size={16} color={month ? colors.accent : colors.muted} />
           </Pressable>
-          {activeMonth && (
-            <Pressable style={styles.clear} hitSlop={8} accessibilityLabel="Показать все месяцы" onPress={() => setMonth(null)}>
+          {month && (
+            <Pressable style={styles.clear} hitSlop={8} accessibilityLabel="Показать все месяцы" onPress={() => chooseMonth(null)}>
               <Feather name="x" size={18} color={colors.muted} />
             </Pressable>
           )}
@@ -93,32 +117,47 @@ export default function Feed() {
       )}
       <MonthPicker
         visible={picking}
-        value={activeMonth}
+        value={month}
         counts={counts}
-        onSelect={setMonth}
+        onSelect={chooseMonth}
         onClose={() => setPicking(false)}
       />
 
-      {data.length === 0 ? (
+      {!data ? (
+        <ActivityIndicator style={styles.more} color={colors.muted} />
+      ) : items.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Пока пусто</Text>
-          <Text style={styles.emptyText}>Нажми на камеру внизу, чтобы сделать первую запись. Всё хранится на телефоне.</Text>
+          <Text style={styles.emptyTitle}>{month ? 'В этом месяце записей нет' : 'Пока пусто'}</Text>
+          {!month && (
+            <Text style={styles.emptyText}>Нажми на камеру внизу, чтобы сделать первую запись. Всё хранится на телефоне.</Text>
+          )}
         </View>
       ) : grid ? (
         <FlatList
-          key="grid"
-          data={visible}
+          key={listKey}
+          data={items}
           numColumns={3}
           keyExtractor={(item) => item.post.id}
           contentContainerStyle={styles.list}
           columnWrapperStyle={{ gap: GRID_GAP }}
           ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={1.5}
+          ListFooterComponent={footer}
+          initialNumToRender={18}
+          windowSize={9}
+          removeClippedSubviews
           renderItem={({ item }) => {
             const cover = item.post.media[0];
             return (
               <Pressable onPress={() => router.push(`/post/${item.post.id}`)} style={{ width: cell, height: cell }}>
                 {cover ? (
-                  <Image source={{ uri: mediaUri(item.dir, cover.thumb) }} style={styles.fill} contentFit="cover" />
+                  <Image
+                    source={{ uri: mediaUri(item.dir, cover.thumb) }}
+                    style={styles.fill}
+                    contentFit="cover"
+                    recyclingKey={item.post.id}
+                  />
                 ) : (
                   <View style={[styles.fill, styles.textTile]}>
                     <Text style={styles.textTileText} numberOfLines={5}>
@@ -132,7 +171,7 @@ export default function Feed() {
         />
       ) : (
         <SectionList
-          key="list"
+          key={listKey}
           sections={sections}
           keyExtractor={(item) => item.post.id}
           contentContainerStyle={styles.list}
@@ -140,6 +179,13 @@ export default function Feed() {
           renderSectionHeader={({ section }) => <Text style={styles.month}>{capitalize(monthTitle(section.key))}</Text>}
           renderItem={renderCard}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={1.5}
+          ListFooterComponent={footer}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={7}
+          removeClippedSubviews
         />
       )}
     </SafeAreaView>
@@ -183,6 +229,7 @@ const makeStyles = (c: Palette) =>
     segText: { fontSize: 13, fontWeight: '600', color: c.muted },
     segTextOn: { color: c.ink },
     list: { paddingHorizontal: space.gutter, paddingTop: 8, paddingBottom: 24 },
+    more: { marginVertical: 24 },
     month: { fontSize: 18, fontWeight: '800', color: c.ink, paddingTop: 14, paddingBottom: 10, backgroundColor: c.bg },
     filterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: space.gutter, marginTop: 8 },
     select: {

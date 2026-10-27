@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
@@ -19,6 +20,7 @@ const PANORAMA_RATIO = 3;
 export default function PostScreen() {
   const db = useSQLiteContext();
   const styles = useStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width, height } = useWindowDimensions();
@@ -97,7 +99,7 @@ export default function PostScreen() {
           ),
         }}
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}>
         {first && (
           <>
             <FlatList

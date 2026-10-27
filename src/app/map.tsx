@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
@@ -13,6 +14,7 @@ const EXCERPT = 120;
 
 export default function MapScreen() {
   const styles = useStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const { colors, scheme } = useTheme();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const { data } = useDbQuery(listWithCoords, []);
@@ -46,7 +48,7 @@ export default function MapScreen() {
         onMessage={(e) => router.push(`/post/${e.nativeEvent.data}`)}
       />
       {points.length === 0 && (
-        <View style={styles.hint}>
+        <View style={[styles.hint, { bottom: space.gutter * 2 + insets.bottom }]}>
           <Text style={styles.hintText}>Пока нет записей с координатами. Они появятся, когда в записи будет место по GPS.</Text>
         </View>
       )}

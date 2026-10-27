@@ -22,7 +22,7 @@ src/app (routes, screens)
 - Root: `Paths.document/plenka/` (app-internal, invisible to other apps and the gallery). Layout: `data-format.md`.
 - SQLite `plenka.db` (default expo-sqlite location), schema in `src/storage/db.ts`, versioned by `PRAGMA user_version`:
   - `posts` — one row per post; `json` holds the full `post.json`, other columns exist for filtering/sorting (`day`, `created_at`, `deleted`) and `search` (lowercased text + tags + place, because SQLite `lower`/`LIKE` ignore Cyrillic case).
-  - Post numbers are computed, not stored: `ROW_NUMBER() OVER (ORDER BY created_at, id)` over non-deleted posts, so a post written for an earlier date takes its place in the sequence.
+  - Post numbers live in `posts.seq` (index only, not in `post.json`): `renumber()` runs `ROW_NUMBER() OVER (ORDER BY created_at, id)` in every write transaction, so a post written for an earlier date takes its place. Index `posts_feed (deleted, created_at, id)` serves the feed order.
   - `outbox` — post ids changed since the last upload (filled now, drained by the future Drive sync).
   - `settings` — key/value (`photoQuality`, `themeMode`, `wifiOnly`, `lastSyncAt`).
   - `drive_files` — local path (relative to the root, `''` = the root folder) → Drive file id (+ `sha256` for media).
@@ -57,7 +57,7 @@ src/app (routes, screens)
 
 | Route | File | Notes |
 | --- | --- | --- |
-| Feed | `src/app/(tabs)/index.tsx` | Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
+| Feed | `src/app/(tabs)/index.tsx` | Paged: `listFeedPage(month, limit)` loads 30 more on scroll end (on focus it reloads the same count, so scroll stays); month counts come from a separate `GROUP BY` query; the list `key` includes the month, so a month change remounts it at the top. Cards (`PostCard`, memoized) have a lazy photo pager (`initialNumToRender=1`, `windowSize=3`) with the thumbnail as placeholder. Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
 | Search | `src/app/(tabs)/search.tsx` | Empty query → tag cloud: equal blue chips «#tag count», most used first (the user rejected size-by-count). Typing → tag suggestions + text/tag/place search over the `search` column; `#tag` (also set by tapping a tag) → exact tag search. Results (`SearchResult`) show tags and highlight the matched words |
@@ -99,3 +99,18 @@ Edge-to-edge: the app draws under the Android navigation buttons. `expo-navigati
 ## Tags
 
 `listTags` counts tags over non-deleted posts. `TagSuggestions` (compose under the tags field, search under the query) shows the most used tags when the current word is empty and prefix/contains matches while typing; picking replaces the word being typed.
+
+## Performance budget (measured 2026-10-27, node:sqlite, 20 000 posts, desktop)
+
+| Query | Before | Now |
+| --- | --- | --- |
+| Feed first page (30) | 56 ms (window over all rows) | 0.1 ms (`seq` + `posts_feed` index) |
+| Feed, one month, first page | 28 ms | 1.4 ms |
+| Month counts | — | 3.4 ms |
+| Search, common word | 65 ms | 0.5 ms (LIMIT 200 stops early) |
+| Search, no match (full scan of `search`) | 35 ms | 12 ms |
+| Renumber on write | — | 15–50 ms |
+
+Phones are roughly 3–5x slower. FTS5 trigram was measured at ~4 ms but not adopted: plain `LIKE` is within budget and FTS5 availability in the bundled SQLite is not guaranteed. Revisit if the no-match search gets slow. Benchmark script idea: build the same schema in `node:sqlite` with synthetic rows and time the exact SQL.
+
+Screens outside the tab bar (compose, post, map) add `useSafeAreaInsets().bottom` to their bottom padding: the app is edge-to-edge and the system buttons overlay content.

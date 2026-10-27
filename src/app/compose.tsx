@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Feather from '@expo/vector-icons/Feather';
 import { currentCoords, formatCoords, placeName, type Coords } from '@/device/location';
@@ -42,6 +43,7 @@ function initialDate(day?: string): Date {
 export default function Compose() {
   const db = useSQLiteContext();
   const styles = useStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const params = useLocalSearchParams<Params>();
   const editing = Boolean(params.id);
@@ -233,7 +235,7 @@ export default function Compose() {
         }}
       />
       <KeyboardAwareScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: space.gutter + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         bottomOffset={24}

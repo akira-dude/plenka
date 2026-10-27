@@ -43,6 +43,10 @@ const MIGRATIONS = [
     rev INTEGER NOT NULL
   );
   `,
+  `
+  ALTER TABLE posts ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX posts_feed ON posts (deleted, created_at, id);
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

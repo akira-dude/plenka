@@ -35,6 +35,8 @@ export function PhotoFrame({ uri, blurUri, w, h, width, frameRatio, fit = 'cover
       )}
       <Image
         source={{ uri }}
+        placeholder={blurUri ? { uri: blurUri } : undefined}
+        placeholderContentFit={whole ? 'contain' : 'cover'}
         style={StyleSheet.absoluteFill}
         contentFit={whole ? 'contain' : 'cover'}
         transition={120}
