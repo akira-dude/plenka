@@ -1,7 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import type { PhotoQuality } from '@/domain/post';
 import type { ThemeMode } from '@/ui/theme';
 
-export type PhotoQuality = 'visual' | 'compact' | 'original';
+export type { PhotoQuality };
 
 async function get(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', key);

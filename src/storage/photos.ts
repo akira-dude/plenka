@@ -1,7 +1,7 @@
 import { Directory, File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import type { MediaItem } from '@/domain/post';
-import type { PhotoQuality } from './settings';
+import { COMPACT_SIDE, type MediaItem, type PhotoQuality } from '@/domain/post';
+import { deleteIfExists } from './files';
 
 export type PickedPhoto = {
   uri: string;
@@ -13,7 +13,6 @@ export type PickedPhoto = {
 
 const THUMB_SIDE = 640;
 const VISUAL_QUALITY = 0.9;
-const COMPACT_SIDE = 1600;
 const COMPACT_QUALITY = 0.85;
 const THUMB_QUALITY = 0.8;
 
@@ -31,9 +30,10 @@ function originalExtension(photo: PickedPhoto): string {
   return ext && ext.length <= 4 ? ext : 'jpg';
 }
 
+const mediaNumber = (file: string) => Number(file.match(/(\d+)\.\w+$/)?.[1] ?? 0);
+
 export function nextMediaNumber(media: MediaItem[]): number {
-  const numbers = media.map((m) => Number(m.file.match(/(\d+)\.\w+$/)?.[1] ?? 0));
-  return Math.max(0, ...numbers) + 1;
+  return Math.max(0, ...media.map((m) => mediaNumber(m.file))) + 1;
 }
 
 export async function storePhoto(
@@ -91,5 +91,18 @@ export async function storePhoto(
     h: height,
     bytes: target.size,
     sha256: await target.digest('SHA-256'),
+    quality,
   };
+}
+
+export async function recompressPhoto(postDir: Directory, item: MediaItem, quality: PhotoQuality): Promise<MediaItem> {
+  const source = new File(postDir, item.file);
+  const next = await storePhoto(
+    { uri: source.uri, width: item.w, height: item.h },
+    postDir,
+    mediaNumber(item.file),
+    quality,
+  );
+  if (next.file !== item.file) deleteIfExists(source);
+  return next;
 }

@@ -41,7 +41,7 @@ src/app (routes, screens)
 ## Photos (`src/storage/photos.ts`)
 
 - Source: `expo-image-picker` (system camera intent or Android Photo Picker). Captured photos land in the app cache, not in the gallery; picked ones are copies. No storage permission is needed on Android 13+.
-- Quality modes (`settings.ts` → `PhotoQuality`): `visual` = WebP 0.9 at full resolution after EXIF orientation is applied; `compact` = WebP 0.85 with the long side scaled down to 1600 px (aspect kept, smaller photos untouched); `original` = byte-for-byte copy. `w`/`h` in `post.json` are the stored dimensions.
+- Quality modes (`settings.ts` → `PhotoQuality`): `visual` = WebP 0.9 at full resolution after EXIF orientation is applied; `compact` = WebP 0.85 with the long side scaled down to 1600 px (aspect kept, smaller photos untouched); `original` = byte-for-byte copy. `w`/`h` in `post.json` are the stored dimensions. Each new media item records its `quality`; older items get it inferred by `mediaQuality` (`src/domain/post.ts`). Order from best to lowest: `original` → `visual` → `compact`; quality can only go down: `savePost` re-encodes kept photos above the chosen level (`recompressPhoto`, same number, thumbnail rebuilt), never up.
 - Thumbnail: WebP 0.8, longest side 640 px, used for grid, calendar, blur backgrounds.
 - `sha256` of the stored file goes into `post.json` (dedup key for upload later).
 - EXIF date/GPS are read in the editor (`parseExifDate`, `parseExifGps`) to prefill the post; they are not copied into the WebP.
@@ -60,10 +60,10 @@ src/app (routes, screens)
 | Feed | `src/app/(tabs)/index.tsx` | Paged: `listFeedPage(month, limit)` loads 30 more on scroll end (on focus it reloads the same count, so scroll stays); month counts come from a separate `GROUP BY` query; the list `key` includes the month, so a month change remounts it at the top. Cards (`PostCard`, memoized) have a lazy photo pager (`initialNumToRender=1`, `windowSize=3`) with the thumbnail as placeholder. Sticky month sections, month select button → `MonthPicker` modal (year arrows + 12-month grid with post counts; Android has no native month-only picker) that filters list and grid, list / grid toggle, sync pill, map button |
 | Archive | `src/app/(tabs)/archive.tsx` | Months after the current one are blocked (right arrow disabled, picker `max`). Tapping the month title opens `MonthPicker` with `allowEmpty`, `max` and no «Все месяцы». Month grid (days with posts dark + mini cover, empty days grey), selected day's posts, "add post for this day" button → `compose?date=YYYY-MM-DD` |
 | Camera tab | `src/app/(tabs)/capture.tsx` | Dummy route; the tab press is intercepted in `(tabs)/_layout.tsx` → `compose?source=camera` |
-| Search | `src/app/(tabs)/search.tsx` | Empty query → tag cloud: equal blue chips «#tag count», most used first (the user rejected size-by-count). Typing → tag suggestions + text/tag/place search over the `search` column; `#tag` (also set by tapping a tag) → exact tag search. Results (`SearchResult`) show tags and highlight the matched words |
+| Search | `src/app/(tabs)/search.tsx` | Empty query → tag cloud: equal blue chips «#tag count», most used first (the user rejected size-by-count). Typing → tag suggestions + text/tag/place search over the `search` column; `#tag` (also set by tapping a tag here or a `TagLinks` chip in a post / feed card, which navigates with params `tag` + `at`) → exact tag search. Results (`SearchResult`) show tags and highlight the matched words |
 | Settings | `src/app/(tabs)/settings.tsx` | Drive status (placeholder), theme, photo quality, storage usage, rebuild index |
-| Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately). Per-post photo quality switch (defaults to the setting, applies to photos added in this session only). `KeyboardAwareScrollView` + «Сохранить» in the header so the keyboard never hides the action |
-| Post | `src/app/post/[id].tsx` | Pager, text, tags, place link → map; header: edit, delete (red) |
+| Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately). Per-post photo quality switch: a new post defaults to the setting and offers all three; an edit defaults to the best quality among kept photos and offers only that level and lower (lower = kept photos get re-encoded, the note warns); hidden when only `compact` is left. New photos use the chosen level. `KeyboardAwareScrollView` + «Сохранить» in the header so the keyboard never hides the action |
+| Post | `src/app/post/[id].tsx` | Pager, text, tags (chips → search via `openTagSearch`, `TagLinks`), place link → map; header: edit, delete (red) |
 | Viewer | `src/app/viewer/[id].tsx` | Full-screen black pager with zoom, param `index` |
 | Map | `src/app/map.tsx` | WebView with Leaflet (unpkg) and OpenStreetMap tiles, needs internet. The WebView `baseUrl` is the GitHub Pages site so OSM gets a Referer (without it OSM returns "Access blocked"; CARTO basemaps now need an API key); dark theme inverts the tile layer with a CSS filter; param `focus` = post id; popup button posts the id back |
 
@@ -75,7 +75,7 @@ Screens reload their data on focus via `useDbQuery`; there is no global store.
 
 ## Location
 
-`src/device/location.ts`, foreground permission only. A new post (not an edit, not opened from the archive with a date) asks for the current position on open; EXIF GPS of a picked photo wins over the device position; the crosshair button forces a fresh device fix. Reverse geocoding fills the place name only when the field is empty and gives up quietly offline.
+`src/device/location.ts`, foreground permission only. A new post (not an edit, not opened from the archive with a date) asks for the current position on open; EXIF GPS of a picked photo wins over the device position; the crosshair button forces a fresh device fix. Reverse geocoding fills the place name only when the field is empty and gives up quietly offline. It runs after the coordinates are shown, so «Определяю координаты…» never waits for it. Timeouts: device fix 20 s (then any last known position), geocoder 8 s. The «x» button also cancels a running lookup (a run counter drops late results).
 
 ## Google Drive sync (`src/sync/`)
 

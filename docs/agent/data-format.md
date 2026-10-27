@@ -34,7 +34,7 @@ plenka/
 | `media` | MediaItem[] | Order = display order, first is the cover |
 | `deleted` | boolean | Tombstone: `true` + empty `media` |
 
-MediaItem: `{ file, thumb, type: "image", w, h, bytes, sha256 }` — paths are relative to the post folder; `w`/`h` are display dimensions after EXIF orientation; `sha256` is hex of the stored file.
+MediaItem: `{ file, thumb, type: "image", w, h, bytes, sha256, quality? }` — paths are relative to the post folder; `w`/`h` are display dimensions after EXIF orientation; `sha256` is hex of the stored file; `quality` is `original` / `visual` / `compact` (optional, added 2026-10-27; when missing, readers infer it: not `.webp` → `original`, long side ≤ 1600 → `compact`, else `visual`).
 
 The human-facing number `№ N` is not part of the format: it is the post's rank by `createdAt`. Early test posts may still contain a `frame` field; it is ignored.
 

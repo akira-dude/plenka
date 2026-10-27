@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
 import { searchWords, suggestTags, tagQuery } from '@/domain/search';
@@ -18,6 +19,13 @@ export default function Search() {
   const styles = useStyles(makeStyles);
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
+  const params = useLocalSearchParams<{ tag?: string; at?: string }>();
+  const request = params.tag ? `${params.tag}:${params.at ?? ''}` : null;
+  const [handled, setHandled] = useState<string | null>(null);
+  if (request && request !== handled) {
+    setHandled(request);
+    setQuery(`#${params.tag}`);
+  }
   const [results, setResults] = useState<IndexedPost[]>([]);
   const { data: tags } = useDbQuery(listTags, []);
 

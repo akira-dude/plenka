@@ -1,5 +1,10 @@
 export const POST_FORMAT = 'plenka/1';
 
+export type PhotoQuality = 'original' | 'visual' | 'compact';
+
+export const QUALITY_ORDER: PhotoQuality[] = ['original', 'visual', 'compact'];
+export const COMPACT_SIDE = 1600;
+
 export type MediaItem = {
   file: string;
   thumb: string;
@@ -8,6 +13,7 @@ export type MediaItem = {
   h: number;
   bytes: number;
   sha256: string;
+  quality?: PhotoQuality;
 };
 
 export type Place = {
@@ -28,6 +34,19 @@ export type Post = {
   media: MediaItem[];
   deleted: boolean;
 };
+
+export function mediaQuality(m: MediaItem): PhotoQuality {
+  if (m.quality && QUALITY_ORDER.includes(m.quality)) return m.quality;
+  if (!m.file.endsWith('.webp')) return 'original';
+  return Math.max(m.w, m.h) <= COMPACT_SIDE ? 'compact' : 'visual';
+}
+
+export const isLowerQuality = (a: PhotoQuality, b: PhotoQuality) => QUALITY_ORDER.indexOf(a) > QUALITY_ORDER.indexOf(b);
+
+export function bestQuality(media: MediaItem[]): PhotoQuality | null {
+  const ranks = media.map((m) => QUALITY_ORDER.indexOf(mediaQuality(m)));
+  return ranks.length ? QUALITY_ORDER[Math.min(...ranks)] : null;
+}
 
 export function parsePost(raw: unknown): Post | null {
   if (!raw || typeof raw !== 'object') return null;

@@ -1,13 +1,21 @@
 import { Directory, File } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { dayKey, toLocalIso } from '@/domain/dates';
-import { POST_FORMAT, parsePost, type MediaItem, type Place, type Post } from '@/domain/post';
+import {
+  POST_FORMAT,
+  isLowerQuality,
+  mediaQuality,
+  parsePost,
+  type MediaItem,
+  type Place,
+  type Post,
+} from '@/domain/post';
 import { countTags, searchWords, tagQuery, type TagCount } from '@/domain/search';
 import { ulid } from '@/domain/ulid';
 import { migrate } from './db';
 import { deleteIfExists, moveTree, readJson, writeJsonAtomic } from './files';
 import { dirOf, postDirName, postsDir, rootDir } from './paths';
-import { nextMediaNumber, storePhoto, type PickedPhoto } from './photos';
+import { nextMediaNumber, recompressPhoto, storePhoto, type PickedPhoto } from './photos';
 import type { PhotoQuality } from './settings';
 
 export type IndexedPost = { post: Post; dir: string; frame: number };
@@ -191,6 +199,11 @@ export async function savePost(
     removeMedia(dir, existing.post.media.filter((m) => !kept.has(m.file)));
   }
 
+  const stored: MediaItem[] = [];
+  for (const m of draft.keep) {
+    stored.push(isLowerQuality(quality, mediaQuality(m)) ? await recompressPhoto(dir, m, quality) : m);
+  }
+
   let number = nextMediaNumber(draft.keep);
   const added: MediaItem[] = [];
   for (const photo of draft.add) added.push(await storePhoto(photo, dir, number++, quality));
@@ -204,7 +217,7 @@ export async function savePost(
     text: draft.text.trim(),
     tags: draft.tags,
     place: draft.place,
-    media: [...draft.keep, ...added],
+    media: [...stored, ...added],
     deleted: false,
   };
   await commit(db, post, dirRel);

@@ -5,6 +5,7 @@ import { dayKey, formatDayShort, timeOf } from '@/domain/dates';
 import type { IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
 import { FEED_MAX_RATIO, FEED_MIN_RATIO, PhotoFrame, clampRatio } from './PhotoFrame';
+import { TagLinks } from './TagLinks';
 import { fonts, type Palette } from './theme';
 import { useStyles } from './ThemeProvider';
 
@@ -70,7 +71,7 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
             {post.text}
           </Text>
         ) : null}
-        {post.tags.length > 0 && <Text style={styles.tags}>{post.tags.map((t) => `#${t}`).join(' ')}</Text>}
+        <TagLinks tags={post.tags} size={13} />
         <Text style={styles.meta}>{meta}</Text>
       </Pressable>
     </View>
@@ -83,7 +84,6 @@ const makeStyles = (c: Palette) =>
     body: { padding: 12, gap: 6 },
     frame: { fontFamily: fonts.mono, fontSize: 11, color: c.muted },
     text: { fontSize: 15, lineHeight: 21, color: c.ink },
-    tags: { fontSize: 13, color: c.accent, fontWeight: '500' },
     meta: { fontSize: 12, color: c.muted },
     count: {
       position: 'absolute',

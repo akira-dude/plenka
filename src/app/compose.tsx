@@ -10,7 +10,7 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Feather from '@expo/vector-icons/Feather';
 import { currentCoords, formatCoords, placeName, type Coords } from '@/device/location';
 import { formatDateTime, parseDayKey, parseExifDate, parseExifGps } from '@/domain/dates';
-import { parseTags, type MediaItem } from '@/domain/post';
+import { bestQuality, isLowerQuality, mediaQuality, parseTags, type MediaItem } from '@/domain/post';
 import { replaceFragment, suggestTags, type TagCount } from '@/domain/search';
 import { mediaUri } from '@/storage/paths';
 import type { PickedPhoto } from '@/storage/photos';
@@ -71,24 +71,36 @@ export default function Compose() {
   const dateFixed = useRef(Boolean(params.date) || editing);
   const coordsSource = useRef<CoordsSource | null>(null);
   const launched = useRef(false);
+  const locateRun = useRef(0);
 
-  const applyCoords = useCallback(async (next: Coords, source: CoordsSource) => {
+  const applyCoords = useCallback((next: Coords, source: CoordsSource) => {
     coordsSource.current = source;
     setCoords(next);
-    const name = await placeName(next);
-    if (name) setPlace((prev) => (prev.trim() ? prev : name));
+    void placeName(next).then((name) => {
+      if (name && coordsSource.current === source) setPlace((prev) => (prev.trim() ? prev : name));
+    });
   }, []);
 
   const locate = useCallback(
-    (force: boolean) =>
-      currentCoords()
+    (force: boolean) => {
+      const run = ++locateRun.current;
+      return currentCoords()
         .catch(() => null)
-        .then(async (found) => {
-          if (found && (force || coordsSource.current !== 'photo')) await applyCoords(found, 'device');
+        .then((found) => {
+          if (run !== locateRun.current) return;
+          if (found && (force || coordsSource.current !== 'photo')) applyCoords(found, 'device');
           setLocating(false);
-        }),
+        });
+    },
     [applyCoords],
   );
+
+  const clearCoords = () => {
+    locateRun.current++;
+    coordsSource.current = null;
+    setCoords(null);
+    setLocating(false);
+  };
 
   useEffect(() => {
     if (!params.id) return;
@@ -105,6 +117,8 @@ export default function Compose() {
           setCoords({ lat: post.place.lat, lon: post.place.lon });
         }
         setDate(new Date(post.createdAt));
+        const best = bestQuality(post.media);
+        if (best) setQuality(best);
       }
       setLoaded(true);
     });
@@ -147,7 +161,7 @@ export default function Compose() {
         }
       }
       const gps = photos.map((p) => parseExifGps(p.exif)).find((g) => g !== null);
-      if (gps && coordsSource.current !== 'post' && coordsSource.current !== 'photo') await applyCoords(gps, 'photo');
+      if (gps && coordsSource.current !== 'post' && coordsSource.current !== 'photo') applyCoords(gps, 'photo');
     },
     [applyCoords],
   );
@@ -183,6 +197,11 @@ export default function Compose() {
 
   const empty = keep.length === 0 && added.length === 0 && !text.trim();
 
+  const ceiling = editing ? bestQuality(keep) : null;
+  const qualityOptions = ceiling ? QUALITY_LABELS.filter((o) => !isLowerQuality(ceiling, o.value)) : QUALITY_LABELS;
+  const chosen = quality && ceiling && isLowerQuality(ceiling, quality) ? ceiling : quality;
+  const recompress = chosen !== null && keep.some((m) => isLowerQuality(chosen, mediaQuality(m)));
+
   const save = async () => {
     if (empty || saving) return;
     setSaving(true);
@@ -198,7 +217,7 @@ export default function Compose() {
           keep,
           add: added,
         },
-        quality ?? (await getPhotoQuality(db)),
+        chosen ?? (await getPhotoQuality(db)),
         params.id,
       );
       void syncNow(db);
@@ -261,23 +280,33 @@ export default function Compose() {
           </Pressable>
         </ScrollView>
 
-        <View style={styles.qualityBlock}>
-          <Text style={styles.label}>Качество новых фото в этой записи</Text>
-          <View style={styles.segment}>
-            {QUALITY_LABELS.map((o) => {
-              const on = quality === o.value;
-              return (
-                <Pressable key={o.value} style={[styles.segItem, on && styles.segOn]} onPress={() => setQuality(o.value)}>
-                  <Text style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
-                </Pressable>
-              );
-            })}
+        {qualityOptions.length > 1 && (
+          <View style={styles.qualityBlock}>
+            <Text style={styles.label}>Качество фото в этой записи</Text>
+            <View style={styles.segment}>
+              {qualityOptions.map((o) => {
+                const on = chosen === o.value;
+                return (
+                  <Pressable
+                    key={o.value}
+                    style={[styles.segItem, on && styles.segOn]}
+                    onPress={() => setQuality(o.value)}
+                  >
+                    <Text style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.note}>
+              {QUALITY_LABELS.find((o) => o.value === chosen)?.hint ?? ''}
+              {recompress
+                ? ' Уже сохранённые фото будут пересжаты, вернуть прежнее качество будет нельзя.'
+                : editing && keep.length > 0
+                  ? ' Уже сохранённые фото не изменятся.'
+                  : ''}
+            </Text>
           </View>
-          <Text style={styles.note}>
-            {QUALITY_LABELS.find((o) => o.value === quality)?.hint ?? ''}
-            {editing && keep.length > 0 ? ' Уже сохранённые фото не пересжимаются.' : ''}
-          </Text>
-        </View>
+        )}
 
         <Pressable style={[styles.field, styles.row]} onPress={editDate}>
           <Feather name="calendar" size={16} color={colors.ink} />
@@ -317,15 +346,8 @@ export default function Compose() {
               disabled={locating}>
               <Feather name="crosshair" size={15} color={colors.accent} />
             </Pressable>
-            {coords && (
-              <Pressable
-                style={styles.smallButton}
-                hitSlop={6}
-                onPress={() => {
-                  coordsSource.current = null;
-                  setCoords(null);
-                }}
-              >
+            {(coords || locating) && (
+              <Pressable style={styles.smallButton} hitSlop={6} onPress={clearCoords}>
                 <Feather name="x" size={15} color={colors.muted} />
               </Pressable>
             )}

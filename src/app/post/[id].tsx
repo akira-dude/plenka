@@ -11,6 +11,7 @@ import { mediaUri } from '@/storage/paths';
 import { deletePost, getPost } from '@/storage/posts';
 import { syncNow, syncedRev, useSyncState } from '@/sync/engine';
 import { PhotoFrame, clampRatio } from '@/ui/PhotoFrame';
+import { TagLinks } from '@/ui/TagLinks';
 import { fonts, space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -148,7 +149,7 @@ export default function PostScreen() {
             </Pressable>
           )}
           {post.text ? <Text style={styles.text}>{post.text}</Text> : null}
-          {post.tags.length > 0 && <Text style={styles.tags}>{post.tags.map((t) => `#${t}`).join(' ')}</Text>}
+          <TagLinks tags={post.tags} />
           <Text style={[styles.stamp, styles.footer]}>
             {status} · правка {post.rev}
           </Text>
@@ -173,6 +174,5 @@ const makeStyles = (c: Palette) =>
     placeText: { fontSize: 14, color: c.muted },
     placeLink: { color: c.accent, fontWeight: '500' },
     text: { fontSize: 16, lineHeight: 24, color: c.ink },
-    tags: { fontSize: 14, fontWeight: '500', color: c.accent },
     footer: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.line },
   });
