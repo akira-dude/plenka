@@ -30,7 +30,7 @@ Nothing planned right now.
 
 ### Later
 
-- **Home server backend** (the user's own always-on box, hardware ordered 2026-10-28: Debian on an old desktop). Reachable directly: the ISP gave a static public IP, the user will buy a domain, HTTPS is terminated by Caddy on the server — no VPS. Leaning to WebDAV (path-based, maps onto `CloudStore`), which is plain HTTP → OTA. Never write the home IP or credentials into this public repo.
+- **Home server backend** (the user's own always-on box, hardware ordered 2026-10-28: Debian on an old desktop). Reachable directly: the ISP gave a static public IP, the user will buy a domain, HTTPS is terminated by Caddy on the server — no VPS. Leaning to WebDAV (path-based, maps onto `CloudStore`), which is plain HTTP → OTA. Never write the home IP or credentials into this public repo. Network constraints (user is in Russia): plain WireGuard is DPI-blocked or unstable and Cloudflare is unreliable, so do not plan on either; remote admin goes through AmneziaWG with a keys-only SSH fallback, and the app itself uses plain HTTPS on 443.
 
 ## Open technical debt
 
