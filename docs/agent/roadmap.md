@@ -30,7 +30,7 @@ Nothing planned right now.
 
 ### Later
 
-- **Home server backend** (the user's own always-on box). Protocol not chosen yet (WebDAV or a small own API over HTTP); plain HTTP would be OTA, anything needing a native client would be APK.
+- **Home server backend** (the user's own always-on box, hardware ordered 2026-10-28: Debian on an old desktop). Reachable directly: the ISP gave a static public IP, the user will buy a domain, HTTPS is terminated by Caddy on the server — no VPS. Leaning to WebDAV (path-based, maps onto `CloudStore`), which is plain HTTP → OTA. Never write the home IP or credentials into this public repo.
 
 ## Open technical debt
 
