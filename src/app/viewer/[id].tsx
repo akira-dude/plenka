@@ -12,6 +12,7 @@ import type { MediaItem } from '@/domain/post';
 import { useMediaUri } from '@/hooks/useMediaUri';
 import { getPost } from '@/storage/posts';
 import { originalUri } from '@/sync/media';
+import { rememberViewerPage } from '@/ui/viewerPage';
 import { ZoomableImage } from '@/ui/ZoomableImage';
 import { fonts } from '@/ui/theme';
 
@@ -53,7 +54,11 @@ export default function Viewer() {
           getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
           showsHorizontalScrollIndicator={false}
           keyExtractor={(m) => m.file}
-          onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
+          onMomentumScrollEnd={(e) => {
+            const next = Math.round(e.nativeEvent.contentOffset.x / width);
+            setPage(next);
+            rememberViewerPage(id, next);
+          }}
           renderItem={({ item }) => (
             <ViewerPage
               dir={data.dir}

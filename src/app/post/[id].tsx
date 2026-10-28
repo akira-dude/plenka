@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
 import { sharePhoto } from '@/device/share';
@@ -14,6 +14,7 @@ import { originalUri } from '@/sync/media';
 import { MediaFrame } from '@/ui/MediaFrame';
 import { clampRatio } from '@/ui/PhotoFrame';
 import { TagLinks } from '@/ui/TagLinks';
+import { takeViewerPage } from '@/ui/viewerPage';
 import { fonts, space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -28,6 +29,16 @@ export default function PostScreen() {
   const { id, photo } = useLocalSearchParams<{ id: string; photo?: string }>();
   const { width, height } = useWindowDimensions();
   const [page, setPage] = useState(() => Number(photo) || 0);
+  const pager = useRef<FlatList<MediaItem>>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const viewed = takeViewerPage(id);
+      if (viewed === undefined) return;
+      setPage(viewed);
+      pager.current?.scrollToIndex({ index: viewed, animated: false });
+    }, [id]),
+  );
 
   const sync = useSyncState();
   const query = useCallback(
@@ -108,6 +119,7 @@ export default function PostScreen() {
         {first && (
           <>
             <FlatList
+              ref={pager}
               data={post.media}
               horizontal
               pagingEnabled
