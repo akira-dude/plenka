@@ -15,6 +15,10 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
   const [page, setPage] = useState(0);
   const cover = post.media[0];
   const open = () => router.push(`/post/${post.id}`);
+  const openPhoto = (index: number) => {
+    router.push({ pathname: '/post/[id]', params: { id: post.id, photo: String(index) } });
+    router.push({ pathname: '/viewer/[id]', params: { id: post.id, index: String(index) } });
+  };
   const meta = [`${formatDayShort(dayKey(post.createdAt))}, ${timeOf(post.createdAt)}`, post.place?.name]
     .filter(Boolean)
     .join(' · ');
@@ -23,7 +27,7 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
   return (
     <View style={styles.card}>
       {cover && post.media.length === 1 && (
-        <Pressable onPress={open}>
+        <Pressable onPress={() => openPhoto(0)}>
           <MediaFrame dir={dir} item={cover} fetch={false} width={width} />
         </Pressable>
       )}
@@ -40,8 +44,8 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
             windowSize={3}
             getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
             onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
-            renderItem={({ item: m }) => (
-              <Pressable onPress={open}>
+            renderItem={({ item: m, index }) => (
+              <Pressable onPress={() => openPhoto(index)}>
                 <MediaFrame dir={dir} item={m} fetch={false} width={width} frameRatio={frameRatio} />
               </Pressable>
             )}

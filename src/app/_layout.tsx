@@ -45,7 +45,13 @@ function Navigation() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="compose" options={{ title: 'Новая запись' }} />
-        <Stack.Screen name="post/[id]" options={{ title: '' }} />
+        <Stack.Screen
+          name="post/[id]"
+          options={({ route }) => ({
+            title: '',
+            animation: (route.params as { photo?: string } | undefined)?.photo ? 'none' : 'default',
+          })}
+        />
         <Stack.Screen name="viewer/[id]" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="map" options={{ title: 'Карта записей' }} />
       </Stack>

@@ -25,9 +25,9 @@ export default function PostScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, photo } = useLocalSearchParams<{ id: string; photo?: string }>();
   const { width, height } = useWindowDimensions();
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(() => Number(photo) || 0);
 
   const sync = useSyncState();
   const query = useCallback(
@@ -113,6 +113,8 @@ export default function PostScreen() {
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               keyExtractor={(m) => m.file}
+              initialScrollIndex={Math.min(page, Math.max(0, post.media.length - 1))}
+              getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
               onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
               renderItem={({ item, index }) => (
                 <Pressable onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: post.id, index } })}>
