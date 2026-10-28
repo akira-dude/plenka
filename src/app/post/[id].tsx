@@ -1,12 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
 import { sharePhoto } from '@/device/share';
 import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
+import { setPhotoPage, usePhotoPage } from '@/hooks/usePhotoPage';
 import { deletePost, getPost } from '@/storage/posts';
 import type { MediaItem } from '@/domain/post';
 import { syncNow, syncedRev, useSyncState } from '@/sync/engine';
@@ -14,7 +15,6 @@ import { originalUri } from '@/sync/media';
 import { MediaFrame } from '@/ui/MediaFrame';
 import { clampRatio } from '@/ui/PhotoFrame';
 import { TagLinks } from '@/ui/TagLinks';
-import { takeViewerPage } from '@/ui/viewerPage';
 import { fonts, space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -26,19 +26,10 @@ export default function PostScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { id, photo } = useLocalSearchParams<{ id: string; photo?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { width, height } = useWindowDimensions();
-  const [page, setPage] = useState(() => Number(photo) || 0);
+  const page = usePhotoPage(id);
   const pager = useRef<FlatList<MediaItem>>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      const viewed = takeViewerPage(id);
-      if (viewed === undefined) return;
-      setPage(viewed);
-      pager.current?.scrollToIndex({ index: viewed, animated: false });
-    }, [id]),
-  );
 
   const sync = useSyncState();
   const query = useCallback(
@@ -49,6 +40,11 @@ export default function PostScreen() {
     [id],
   );
   const { data } = useDbQuery(query, null);
+  const photoCount = data?.post.media.length ?? 0;
+
+  useEffect(() => {
+    if (photoCount > 0) pager.current?.scrollToIndex({ index: Math.min(page, photoCount - 1), animated: false });
+  }, [page, photoCount]);
 
   const confirmDelete = () =>
     Alert.alert('Удалить запись?', 'Фото этой записи удалятся с телефона.', [
@@ -127,7 +123,7 @@ export default function PostScreen() {
               keyExtractor={(m) => m.file}
               initialScrollIndex={Math.min(page, Math.max(0, post.media.length - 1))}
               getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-              onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
+              onMomentumScrollEnd={(e) => setPhotoPage(post.id, Math.round(e.nativeEvent.contentOffset.x / width))}
               renderItem={({ item, index }) => (
                 <Pressable onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: post.id, index } })}>
                   <MediaFrame

@@ -10,9 +10,9 @@ import { sharePhoto } from '@/device/share';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import type { MediaItem } from '@/domain/post';
 import { useMediaUri } from '@/hooks/useMediaUri';
+import { setPhotoPage } from '@/hooks/usePhotoPage';
 import { getPost } from '@/storage/posts';
 import { originalUri } from '@/sync/media';
-import { rememberViewerPage } from '@/ui/viewerPage';
 import { ZoomableImage } from '@/ui/ZoomableImage';
 import { fonts } from '@/ui/theme';
 
@@ -57,7 +57,7 @@ export default function Viewer() {
           onMomentumScrollEnd={(e) => {
             const next = Math.round(e.nativeEvent.contentOffset.x / width);
             setPage(next);
-            rememberViewerPage(id, next);
+            setPhotoPage(id, next);
           }}
           renderItem={({ item }) => (
             <ViewerPage

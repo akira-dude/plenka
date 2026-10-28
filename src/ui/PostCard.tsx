@@ -1,6 +1,8 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import type { MediaItem } from '@/domain/post';
+import { setPhotoPage, usePhotoPage } from '@/hooks/usePhotoPage';
 import { dayKey, formatDayShort, timeOf } from '@/domain/dates';
 import type { IndexedPost } from '@/storage/posts';
 import { MediaFrame } from './MediaFrame';
@@ -12,10 +14,18 @@ import { useStyles } from './ThemeProvider';
 export const PostCard = memo(function PostCard({ item, width }: { item: IndexedPost; width: number }) {
   const styles = useStyles(makeStyles);
   const { post, dir, frame } = item;
-  const [page, setPage] = useState(0);
+  const count = post.media.length;
+  const page = Math.min(usePhotoPage(post.id), Math.max(0, count - 1));
+  const pager = useRef<FlatList<MediaItem>>(null);
   const cover = post.media[0];
+
+  useEffect(() => {
+    if (count > 1) pager.current?.scrollToIndex({ index: page, animated: false });
+  }, [page, count]);
+
   const open = () => router.push(`/post/${post.id}`);
   const openPhoto = (index: number) => {
+    setPhotoPage(post.id, index);
     router.push({ pathname: '/post/[id]', params: { id: post.id, photo: String(index) } });
     router.push({ pathname: '/viewer/[id]', params: { id: post.id, index: String(index) } });
   };
@@ -34,6 +44,7 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
       {post.media.length > 1 && (
         <View>
           <FlatList
+            ref={pager}
             data={post.media}
             horizontal
             pagingEnabled
@@ -42,8 +53,9 @@ export const PostCard = memo(function PostCard({ item, width }: { item: IndexedP
             initialNumToRender={1}
             maxToRenderPerBatch={1}
             windowSize={3}
+            initialScrollIndex={page}
             getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-            onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
+            onMomentumScrollEnd={(e) => setPhotoPage(post.id, Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item: m, index }) => (
               <Pressable onPress={() => openPhoto(index)}>
                 <MediaFrame dir={dir} item={m} fetch={false} width={width} frameRatio={frameRatio} />
