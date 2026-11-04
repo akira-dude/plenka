@@ -32,6 +32,15 @@ Nothing planned right now.
 
 - **Home server backend** (the user's own always-on box, assembled 2026-11-04: i7-3770, GA-B75-D3V, 16 GB, 256 GB mSATA SSD for the system, 4 TB IronWolf for data with LUKS + btrfs, Ippon UPS; OpenMediaVault 8 with Docker; no discrete GPU, the GTX 1060 was sold, so installs need a monitor on the onboard video). Reachable directly: the ISP gave a static public IP, the user will buy a domain, HTTPS is terminated by Caddy on the server — no VPS. Leaning to WebDAV (path-based, maps onto `CloudStore`), which is plain HTTP → OTA. Never write the home IP or credentials into this public repo. Network constraints (user is in Russia): plain WireGuard is DPI-blocked or unstable and Cloudflare is unreliable, so do not plan on either; remote admin goes through AmneziaWG with a keys-only SSH fallback, and the app itself uses plain HTTPS on 443.
 
+- **Home server stress test** (requested 2026-11-04, after everything is set up). Run each scenario and write down what happened:
+  - Power cut: pull the UPS plug → NUT waits, then shuts the server down cleanly, the UPS cuts its output → power back → server boots by itself (`AC BACK`) → disk stays locked until the user unlocks it → services come back.
+  - Short power blip (under the NUT delay): nothing should shut down.
+  - Internet loss: unplug the WAN cable → LAN keeps working, Plenka queues uploads and sends them after reconnect, the remote-admin tunnel reconnects by itself.
+  - Router reboot: server gets the same LAN address (DHCP reservation), port forwards still work.
+  - External attack from outside the LAN: full port scan (only 80/443 TCP, the AmneziaWG UDP port and the SSH fallback port may answer), SSH password login must be refused, brute force on SSH and on the Plenka WebDAV login gets banned, admin UI and SMB unreachable from outside.
+  - Alarm triggers: unknown USB device, new system user, unexpected open port → Telegram message + shutdown, and the server stays off and locked; Telegram `/off` panic command works.
+  - Data safety: restore a deleted file from a btrfs snapshot, run a scrub, check SMART alerts reach the user.
+
 ## Open technical debt
 
 Temporary notes. When an item is resolved, delete its entry here and every pointer to it (`AGENTS.md` → «Shipping to the phone») in the same commit.
