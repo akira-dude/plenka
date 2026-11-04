@@ -40,6 +40,7 @@ Nothing planned right now.
   - External attack from outside the LAN: full port scan (only 80/443 TCP, the AmneziaWG UDP port and the SSH fallback port may answer), SSH password login must be refused, brute force on SSH and on the Plenka WebDAV login gets banned, admin UI and SMB unreachable from outside.
   - Alarm triggers: unknown USB device, new system user, unexpected open port → Telegram message + shutdown, and the server stays off and locked; Telegram `/off` panic command works.
   - Data safety: restore a deleted file from a btrfs snapshot, run a scrub, check SMART alerts reach the user.
+  - How the IP looks to RKN-style active probing: check the IP on Censys and with an outside `nmap -p- -sV` scan. Expected: only our HTTPS with a certificate for our own domain and a real page behind it, the SSH fallback port, nothing that answers like a proxy or impersonates another site. Never run circumvention software (Xray/VLESS, open proxies) on this server.
 
 ## Open technical debt
 
