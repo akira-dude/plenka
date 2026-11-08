@@ -11,11 +11,11 @@ Only work that is not built yet, plus the decisions that shape it. Built feature
 ## Decisions
 
 - Android only. Photos only, no video. No encryption. Posts are written from one phone; the cloud is a backup that can be merged back (2026-10-27).
-- Cloud: Google Drive, scope `drive.file`, visible folder `My Drive/Плёнка`. Later the user plans a small always-on home server behind the router; sync goes through a provider interface so it can become a second backend. GitHub was rejected for photos (repo size limits, binary history).
+- Cloud: since 2026-11-08 the user's own home server over WebDAV (`plenka.arsenbox.ru`), chosen instead of Google Drive, not next to it (one provider at a time). Google Drive (`drive.file`, folder `My Drive/Плёнка`) stays supported as the alternative provider. GitHub was rejected for photos (repo size limits, binary history).
 - Sharing: one photo at a time through the system share sheet, JPEG, no text, no links.
 - Photo quality: `original` (byte copy) → `visual` (WebP 0.9, full size) → `compact` (WebP 0.85, ≤ 1600 px). Default from settings, per-post override; an edit can only lower the quality of stored photos.
 - Photos taken in the app stay only in the app; gallery photos are copied.
-- Dropped on 2026-10-27: custom in-app camera, «also save to gallery», zip export/import, PC viewer. Drive is the only way to move data.
+- Dropped on 2026-10-27: custom in-app camera, «also save to gallery», zip export/import, PC viewer. The cloud (server or Drive) is the only way to move data.
 
 ## Planned
 
@@ -27,10 +27,11 @@ Nothing planned right now.
 
 - **Background sync** while the app is closed (`expo-background-task`).
 - **Expo SDK patch bump** — see «Open technical debt».
+- **Server password into the Android keystore** (`expo-secure-store`): today it sits in the app's own SQLite `settings` table.
 
 ### Later
 
-- **Home server backend** — **OTA**. Plenka syncs to the user's own server as a second `CloudStore` next to Google Drive: WebDAV on `https://plenka.arsenbox.ru` (Caddy terminates HTTPS, the wildcard DNS record already points there), data in the server's `plenka` folder, its own password. Plain HTTPS → no native code → ships with `eas update`. Drive stays as the second copy at first. The server itself (hardware, OS, disks, network, monitoring, security, maintenance, stress test) is documented outside this public repo, in the user's workspace `F:\GIT\docs\home-server\`; never copy the home IP, credentials or server internals into this repo. Network constraints in Russia: no plain WireGuard, no Cloudflare, no Telegram from the server.
+Nothing planned right now.
 
 ## Open technical debt
 

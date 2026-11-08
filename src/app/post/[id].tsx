@@ -73,11 +73,11 @@ export default function PostScreen() {
   const first = post.media[0];
   const frameRatio = first ? clampRatio(first.w / first.h, width / (height * MAX_PHOTO_SHARE), PANORAMA_RATIO) : 1;
   const hasCoords = post.place?.lat != null && post.place.lon != null;
-  const status = !sync.account
+  const status = !sync.target
     ? 'только на телефоне'
     : data.synced !== null && data.synced >= post.rev
-      ? 'в Google Drive'
-      : 'ждёт отправки в Drive';
+      ? sync.target.where
+      : `ждёт отправки ${sync.target.to}`;
 
   return (
     <View style={styles.screen}>

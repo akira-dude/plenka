@@ -18,7 +18,7 @@ Details are read on demand: `docs/agent/INDEX.md`.
 | `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
 | `src/ui/` | Shared components, `theme.ts` (light/dark palettes), `ThemeProvider.tsx` (`useTheme`, `useStyles`), `mapHtml.ts` (Leaflet page for the map WebView) |
 | `src/device/` | Device services: `location.ts` (GPS, reverse geocoding), `share.ts` (send one photo as JPEG through the system share sheet) |
-| `src/sync/` | Cloud backup: `store.ts` (`CloudStore` interface), `driveStore.ts` (Google Drive implementation, path ↔ id mapping), `drive.ts` (REST v3 client), `auth.ts` (Google sign-in, web client id), `engine.ts` (outbox → cloud, `mergeFromCloud`, `useSyncState`), `media.ts` (lazy originals, free up space), `useAutoSync.ts` (triggers) |
+| `src/sync/` | Cloud backup: `store.ts` (`CloudStore` interface), `driveStore.ts` (Google Drive implementation, path ↔ id mapping), `drive.ts` (REST v3 client), `webdavStore.ts` + `webdav.ts` (own server over WebDAV), `auth.ts` (Google sign-in, web client id), `engine.ts` (outbox → cloud, `mergeFromCloud`, `useSyncState`), `media.ts` (lazy originals, free up space), `useAutoSync.ts` (triggers) |
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |
 | `assets/` | App icon set (full icon, adaptive foreground/background, monochrome, splash, favicon). Generated from simple SVG shapes (film frame + sun + hills on the accent blue); regenerate all files together if the logo changes |

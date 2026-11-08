@@ -3,20 +3,9 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { rootDir } from '@/storage/paths';
 import { accessToken, dropToken } from './auth';
 import { DriveError, FOLDER_MIME, createDrive, type Drive } from './drive';
-import { nameOf, parentOf, type CloudStore } from './store';
+import { mimeOf, nameOf, parentOf, type CloudStore } from './store';
 
 const ROOT_FOLDER = 'Плёнка';
-
-const MIME: Record<string, string> = {
-  webp: 'image/webp',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  heic: 'image/heic',
-  heif: 'image/heif',
-};
-
-const mimeOf = (path: string) => MIME[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
 type Mapping = { drive_id: string; sha256: string | null };
 

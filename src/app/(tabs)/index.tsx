@@ -85,7 +85,7 @@ export default function Feed() {
       <View style={styles.header}>
         <Text style={styles.logo}>Плёнка</Text>
         <View style={styles.headerRight}>
-          {sync.account && (sync.running || sync.queued > 0) && (
+          {sync.target && (sync.running || sync.queued > 0) && (
             <Pressable style={styles.pill} onPress={() => router.push('/settings')}>
               <Feather name={sync.running ? 'refresh-cw' : 'upload-cloud'} size={12} color={colors.amber} />
               <Text style={styles.pillText}>{sync.running ? 'отправка' : `ждут: ${sync.queued}`}</Text>

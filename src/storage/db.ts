@@ -47,6 +47,12 @@ const MIGRATIONS = [
   ALTER TABLE posts ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX posts_feed ON posts (deleted, created_at, id);
   `,
+  `
+  CREATE TABLE webdav_files (
+    path TEXT PRIMARY KEY NOT NULL,
+    sha256 TEXT
+  );
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

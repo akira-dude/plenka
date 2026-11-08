@@ -46,3 +46,26 @@ export async function getLastSyncAt(db: SQLiteDatabase): Promise<string | null> 
 export async function setLastSyncAt(db: SQLiteDatabase, iso: string): Promise<void> {
   await set(db, 'lastSyncAt', iso);
 }
+
+export type CloudProvider = 'drive' | 'server';
+
+export type ServerConfig = { url: string; user: string; password: string };
+
+export async function getCloudProvider(db: SQLiteDatabase): Promise<CloudProvider> {
+  return (await get(db, 'cloudProvider')) === 'server' ? 'server' : 'drive';
+}
+
+export async function setCloudProvider(db: SQLiteDatabase, provider: CloudProvider): Promise<void> {
+  await set(db, 'cloudProvider', provider);
+}
+
+export async function getServerConfig(db: SQLiteDatabase): Promise<ServerConfig | null> {
+  const [url, user, password] = await Promise.all([get(db, 'serverUrl'), get(db, 'serverUser'), get(db, 'serverPassword')]);
+  return url && user && password ? { url, user, password } : null;
+}
+
+export async function setServerConfig(db: SQLiteDatabase, config: ServerConfig): Promise<void> {
+  await set(db, 'serverUrl', config.url);
+  await set(db, 'serverUser', config.user);
+  await set(db, 'serverPassword', config.password);
+}

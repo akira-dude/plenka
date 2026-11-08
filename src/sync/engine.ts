@@ -6,13 +6,24 @@ import { parsePost, type Post } from '@/domain/post';
 import { deleteIfExists, writeJsonAtomic } from '@/storage/files';
 import { dirOf, fileOf } from '@/storage/paths';
 import { countPosts, getStored, rebuildIndex } from '@/storage/posts';
-import { getLastSyncAt, getWifiOnly, setLastSyncAt } from '@/storage/settings';
+import {
+  getCloudProvider,
+  getLastSyncAt,
+  getServerConfig,
+  getWifiOnly,
+  setCloudProvider,
+  setLastSyncAt,
+} from '@/storage/settings';
 import { currentAccount, type Account } from './auth';
 import { DriveStore } from './driveStore';
+import { WebDavStore } from './webdavStore';
 import { parentOf, type CloudStore } from './store';
+
+export type SyncTarget = { kind: 'drive' | 'server'; title: string; where: string; to: string; detail: string };
 
 export type SyncState = {
   account: Account | null;
+  target: SyncTarget | null;
   running: boolean;
   queued: number;
   done: number;
@@ -24,6 +35,7 @@ export type SyncState = {
 
 let state: SyncState = {
   account: null,
+  target: null,
   running: false,
   queued: 0,
   done: 0,
@@ -54,15 +66,30 @@ async function countQueued(db: SQLiteDatabase): Promise<number> {
   return row?.n ?? 0;
 }
 
+async function currentTarget(db: SQLiteDatabase, account: Account | null): Promise<SyncTarget | null> {
+  if ((await getCloudProvider(db)) === 'server') {
+    const config = await getServerConfig(db);
+    if (!config) return null;
+    return { kind: 'server', title: 'Свой сервер', where: 'на сервере', to: 'на сервер', detail: config.url.replace(/^https?:\/\//, '') };
+  }
+  return account ? { kind: 'drive', title: 'Google Drive', where: 'в Google Drive', to: 'в Google Drive', detail: account.email } : null;
+}
+
 export async function refreshSyncState(db: SQLiteDatabase, account?: Account | null): Promise<void> {
+  const resolved = account === undefined ? await currentAccount().catch(() => null) : account;
   update({
-    account: account === undefined ? await currentAccount().catch(() => null) : account,
+    account: resolved,
+    target: await currentTarget(db, resolved),
     queued: await countQueued(db),
     lastSyncAt: await getLastSyncAt(db),
   });
 }
 
 export async function openStore(db: SQLiteDatabase): Promise<CloudStore | null> {
+  if ((await getCloudProvider(db)) === 'server') {
+    const config = await getServerConfig(db);
+    return config ? new WebDavStore(db, config) : null;
+  }
   const account = state.account ?? (await currentAccount().catch(() => null));
   return account ? new DriveStore(db) : null;
 }
@@ -112,9 +139,9 @@ async function resetRemote(db: SQLiteDatabase, store: CloudStore): Promise<void>
 
 export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolean } = {}): Promise<void> {
   if (state.running) return;
-  const account = state.account ?? (await currentAccount().catch(() => null));
-  if (!account) {
-    await refreshSyncState(db, null);
+  const store = await openStore(db);
+  if (!store) {
+    await refreshSyncState(db);
     return;
   }
   const net = await NetInfo.fetch();
@@ -127,9 +154,8 @@ export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolea
   const queue = await db.getAllAsync<{ post_id: string; rev: number }>(
     'SELECT post_id, rev FROM outbox ORDER BY queued_at',
   );
-  update({ account, running: true, waitingForWifi: false, error: null, done: 0, total: queue.length });
+  update({ running: true, waitingForWifi: false, error: null, done: 0, total: queue.length });
 
-  const store: CloudStore = new DriveStore(db);
   try {
     await store.ensureRoot();
     for (const item of queue) {
@@ -152,7 +178,7 @@ export async function syncNow(db: SQLiteDatabase, options: { ignoreWifi?: boolea
     update({ error: store.describe(e) });
   } finally {
     update({ running: false });
-    await refreshSyncState(db, account);
+    await refreshSyncState(db);
   }
 }
 
@@ -258,4 +284,54 @@ export function mergeSummary(result: MergeResult | null): string {
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+export async function switchToServer(db: SQLiteDatabase, onProgress: (text: string) => void): Promise<number> {
+  if (state.running) throw new Error('Сейчас идёт синхронизация. Попробуй через минуту.');
+  const config = await getServerConfig(db);
+  if (!config) throw new Error('Сначала укажи адрес сервера, логин и пароль.');
+  const server = new WebDavStore(db, config);
+  onProgress('Проверяю сервер…');
+  try {
+    await server.hasRoot();
+  } catch (e) {
+    throw new Error(server.describe(e));
+  }
+
+  const posts = await db.getAllAsync<{ json: string; dir: string }>('SELECT json, dir FROM posts WHERE deleted = 0');
+  const missing = posts.flatMap(({ json, dir }) =>
+    (JSON.parse(json) as Post).media.filter((m) => !fileOf(dir, m.file).exists).map((m) => ({ dir, file: m.file })),
+  );
+  if (missing.length > 0) {
+    if (!(await currentAccount().catch(() => null))) {
+      throw new Error(
+        `На телефоне нет ${missing.length} полных фото: они остались только в Google Drive. Подключи Drive, чтобы скачать их перед переездом.`,
+      );
+    }
+    const drive = new DriveStore(db);
+    let done = 0;
+    for (const { dir, file } of missing) {
+      onProgress(`Скачиваю из Google Drive: ${++done} из ${missing.length}`);
+      if (!(await drive.download(`${dir}/${file}`, fileOf(dir, file)))) {
+        throw new Error(`Не удалось скачать ${dir}/${file} из Google Drive. Переезд остановлен, ничего не изменилось.`);
+      }
+    }
+  }
+
+  await setCloudProvider(db, 'server');
+  await resetRemote(db, server);
+  await refreshSyncState(db);
+  void syncNow(db, { ignoreWifi: true });
+  return posts.length;
+}
+
+export async function disconnectServer(db: SQLiteDatabase): Promise<void> {
+  const now = toLocalIso(new Date());
+  await setCloudProvider(db, 'drive');
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM synced_posts');
+    await db.runAsync('DELETE FROM webdav_files');
+    await db.runAsync('INSERT OR IGNORE INTO outbox (post_id, rev, queued_at) SELECT id, rev, ? FROM posts', now);
+  });
+  await refreshSyncState(db);
 }

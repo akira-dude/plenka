@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
 import { connect, describeAuthError } from '@/sync/auth';
@@ -17,16 +18,16 @@ export function RestoreOffer({ onDone }: { onDone: () => void }) {
   const restore = async () => {
     setProgress('…');
     try {
-      if (!sync.account) {
+      if (!sync.target) {
         const account = await connect();
         if (!account) return;
         await refreshSyncState(db, account);
       }
       const result = await mergeFromCloud(db, (done, total) => setProgress(`${done} из ${total}`));
-      Alert.alert('Google Drive', mergeSummary(result));
+      Alert.alert(sync.target?.title ?? 'Google Drive', mergeSummary(result));
       onDone();
     } catch (e) {
-      Alert.alert('Google Drive', describeAuthError(e));
+      Alert.alert(sync.target?.title ?? 'Google Drive', describeAuthError(e));
     } finally {
       setProgress(null);
     }
@@ -34,7 +35,7 @@ export function RestoreOffer({ onDone }: { onDone: () => void }) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.text}>Дневник уже вёлся раньше? Записи можно вернуть из папки «Плёнка» на Google Drive.</Text>
+      <Text style={styles.text}>Дневник уже вёлся раньше? Записи можно вернуть со своего сервера или из Google Drive.</Text>
       <Pressable style={styles.button} onPress={restore} disabled={progress !== null}>
         {progress !== null ? (
           <>
@@ -44,10 +45,17 @@ export function RestoreOffer({ onDone }: { onDone: () => void }) {
         ) : (
           <>
             <Feather name="download-cloud" size={16} color={colors.onAccent} />
-            <Text style={styles.buttonText}>Восстановить из Google Drive</Text>
+            <Text style={styles.buttonText}>
+              {sync.target?.kind === 'server' ? 'Восстановить с сервера' : 'Восстановить из Google Drive'}
+            </Text>
           </>
         )}
       </Pressable>
+      {sync.target?.kind !== 'server' && (
+        <Pressable style={styles.link} onPress={() => router.push('/settings')} disabled={progress !== null}>
+          <Text style={styles.linkText}>Подключить свой сервер</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -66,4 +74,6 @@ const makeStyles = (c: Palette) =>
       paddingVertical: 13,
     },
     buttonText: { color: c.onAccent, fontSize: 15, fontWeight: '700' },
+    link: { alignSelf: 'center', padding: 8 },
+    linkText: { fontSize: 14, fontWeight: '600', color: c.accent },
   });

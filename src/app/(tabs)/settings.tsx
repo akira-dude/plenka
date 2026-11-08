@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -11,9 +12,18 @@ import { countPosts, rebuildIndex } from '@/storage/posts';
 import { getPhotoQuality, getWifiOnly, setPhotoQuality, setWifiOnly, type PhotoQuality } from '@/storage/settings';
 import { connect, describeAuthError, disconnect } from '@/sync/auth';
 import { toLocalIso } from '@/domain/dates';
-import { mergeFromCloud, mergeSummary, refreshSyncState, resendAll, syncNow, useSyncState } from '@/sync/engine';
+import {
+  disconnectServer,
+  mergeFromCloud,
+  mergeSummary,
+  refreshSyncState,
+  resendAll,
+  syncNow,
+  useSyncState,
+} from '@/sync/engine';
 import { findFreeable, freeOriginals, type Freeable } from '@/sync/media';
 import { AppUpdates } from '@/ui/AppUpdates';
+import { ServerSetup } from '@/ui/ServerSetup';
 import { fonts, space, type Palette, type ThemeMode } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
@@ -64,7 +74,9 @@ export default function Settings() {
   const { data, reload } = useDbQuery<Overview | null>(loadOverview, null);
   const [busy, setBusy] = useState(false);
   const [freeing, setFreeing] = useState(false);
+  const [editingServer, setEditingServer] = useState(false);
   const sync = useSyncState();
+  const where = sync.target?.where ?? 'в облаке';
 
   const chooseQuality = useCallback(
     async (value: PhotoQuality) => {
@@ -100,13 +112,13 @@ export default function Settings() {
       if (all.files.length === 0) {
         Alert.alert(
           'Освобождать нечего',
-          'На телефоне нет полных фото, копии которых уже лежат в Google Drive. Если записи ещё ждут отправки, дождись синхронизации.',
+          `На телефоне нет полных фото, копии которых уже лежат ${where}. Если записи ещё ждут отправки, дождись синхронизации.`,
         );
         return;
       }
       Alert.alert(
         'Освободить место?',
-        `С телефона удалятся полные фото, копии которых уже есть в Google Drive. Превью останутся, а полное фото скачается само, когда откроешь запись.\n\nСтарше ${FREE_AFTER_MONTHS} месяцев: ${formatBytes(old.bytes)}\nВсе: ${formatBytes(all.bytes)}`,
+        `С телефона удалятся полные фото, копии которых уже есть ${where}. Превью останутся, а полное фото скачается само, когда откроешь запись.\n\nСтарше ${FREE_AFTER_MONTHS} месяцев: ${formatBytes(old.bytes)}\nВсе: ${formatBytes(all.bytes)}`,
         [
           { text: 'Отмена', style: 'cancel' },
           ...(old.files.length > 0 ? [{ text: `Старше ${FREE_AFTER_MONTHS} мес.`, onPress: () => free(old) }] : []),
@@ -122,11 +134,20 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+      >
         <Text style={styles.title}>Настройки</Text>
 
-        <Text style={styles.section}>Google Drive</Text>
-        <DriveSection onChanged={reload} />
+        <Text style={styles.section}>Хранилище</Text>
+        <CloudSection onChanged={reload} onEditServer={() => setEditingServer((v) => !v)} />
+        {sync.target?.kind === 'server' ? (
+          editingServer && <ServerSetup mode="edit" onDone={() => setEditingServer(false)} />
+        ) : (
+          <ServerSetup mode="move" onDone={reload} />
+        )}
 
         <Text style={styles.section}>Тема</Text>
         <View style={styles.segment}>
@@ -171,15 +192,15 @@ export default function Settings() {
         ) : (
           <ActivityIndicator color={colors.muted} />
         )}
-        {sync.account && (
+        {sync.target && (
           <Pressable style={styles.button} onPress={offerFreeSpace} disabled={freeing}>
             {freeing ? <ActivityIndicator color={colors.ink} /> : <Text style={styles.buttonText}>Освободить место</Text>}
           </Pressable>
         )}
-        {!sync.account && (
+        {!sync.target && (
           <View style={styles.warn}>
             <Text style={styles.warnText}>
-              Пока Google Drive не подключён, записи хранятся только на телефоне. При удалении приложения Android
+              Пока хранилище не подключено, записи хранятся только на телефоне. При удалении приложения Android
               спросит, сохранить ли данные: отвечай «Да».
             </Text>
           </View>
@@ -197,7 +218,7 @@ export default function Settings() {
         <Pressable style={styles.button} onPress={rebuild} disabled={busy}>
           {busy ? <ActivityIndicator color={colors.ink} /> : <Text style={styles.buttonText}>Пересобрать список записей</Text>}
         </Pressable>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -207,7 +228,7 @@ function formatSyncTime(iso: string | null): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)} в ${iso.slice(11, 16)}`;
 }
 
-function DriveSection({ onChanged }: { onChanged: () => void }) {
+function CloudSection({ onChanged, onEditServer }: { onChanged: () => void; onEditServer: () => void }) {
   const db = useSQLiteContext();
   const styles = useStyles(makeStyles);
   const { colors } = useTheme();
@@ -220,7 +241,7 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
     try {
       await task();
     } catch (e) {
-      Alert.alert('Google Drive', describeAuthError(e));
+      Alert.alert(sync.target?.title ?? 'Google Drive', describeAuthError(e));
     } finally {
       setBusy(null);
       onChanged();
@@ -238,8 +259,18 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
   const onRestore = () =>
     run('restore', async () => {
       const result = await mergeFromCloud(db, (done, total) => setBusy(`restore:${done} из ${total}`));
-      Alert.alert('Объединение с Drive', mergeSummary(result));
+      Alert.alert('Объединение', mergeSummary(result));
     });
+
+  const onDisconnectServer = () =>
+    Alert.alert(
+      'Отключить свой сервер?',
+      'Записи на телефоне и на сервере останутся. Плёнка вернётся к Google Drive и при подключении отправит туда всё заново.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        { text: 'Отключить', style: 'destructive', onPress: () => run('disconnect', () => disconnectServer(db)) },
+      ],
+    );
 
   const onDisconnect = () =>
     Alert.alert('Отключить Google Drive?', 'Записи на телефоне и копии в Drive останутся. Новые записи перестанут отправляться.', [
@@ -256,12 +287,12 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
     ]);
 
   const onResend = () =>
-    Alert.alert('Отправить всё заново?', 'Все записи будут заново сверены с Drive и дозагружены. Это может занять время и трафик.', [
+    Alert.alert('Отправить всё заново?', `Все записи будут заново сверены и дозагружены ${sync.target?.to ?? ''}. Это может занять время и трафик.`, [
       { text: 'Отмена', style: 'cancel' },
       { text: 'Отправить', onPress: () => run('resend', () => resendAll(db)) },
     ]);
 
-  if (!sync.account) {
+  if (!sync.target) {
     return (
       <View style={styles.card}>
         <View style={styles.row}>
@@ -295,15 +326,15 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Feather name="cloud" size={18} color={colors.accent} />
+        <Feather name={sync.target.kind === 'server' ? 'server' : 'cloud'} size={18} color={colors.accent} />
         <Text style={[styles.cardTitle, styles.flex]} numberOfLines={1}>
-          {sync.account.email}
+          {sync.target.title}: {sync.target.detail}
         </Text>
       </View>
       <Text style={styles.stat}>{status}</Text>
       <Text style={styles.note}>Последняя синхронизация: {formatSyncTime(sync.lastSyncAt)}</Text>
       {sync.error && <Text style={styles.error}>{sync.error}</Text>}
-      {busy?.startsWith('restore') && <Text style={styles.note}>Сверяю с Drive: {busy.split(':')[1] ?? '…'}</Text>}
+      {busy?.startsWith('restore') && <Text style={styles.note}>Сверяю: {busy.split(':')[1] ?? '…'}</Text>}
 
       <View style={[styles.row, styles.between]}>
         <Text style={styles.optionTitle}>Только по Wi-Fi</Text>
@@ -335,12 +366,23 @@ function DriveSection({ onChanged }: { onChanged: () => void }) {
         </Pressable>
       </View>
       <Text style={styles.note}>
-        «Объединить» сводит записи телефона и Drive: чего нет на телефоне, скачается (полные фото подтянутся при
-        открытии), чего нет в Drive, отправится туда.
+        «Объединить» сводит записи телефона и хранилища: чего нет на телефоне, скачается (полные фото подтянутся
+        при открытии), чего нет {sync.target.where}, отправится туда.
       </Text>
-      <Pressable style={styles.textButton} onPress={onDisconnect} disabled={busy !== null}>
-        <Text style={styles.danger}>Отключить Drive</Text>
-      </Pressable>
+      {sync.target.kind === 'server' ? (
+        <View style={[styles.row, styles.between]}>
+          <Pressable style={styles.textButton} onPress={onEditServer} disabled={busy !== null}>
+            <Text style={styles.link}>Логин и пароль</Text>
+          </Pressable>
+          <Pressable style={styles.textButton} onPress={onDisconnectServer} disabled={busy !== null}>
+            <Text style={styles.danger}>Отключить сервер</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable style={styles.textButton} onPress={onDisconnect} disabled={busy !== null}>
+          <Text style={styles.danger}>Отключить Drive</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -367,6 +409,7 @@ const makeStyles = (c: Palette) =>
     error: { fontSize: 13, color: c.danger, lineHeight: 19 },
     textButton: { alignSelf: 'center', padding: 8 },
     danger: { fontSize: 14, fontWeight: '600', color: c.danger },
+    link: { fontSize: 14, fontWeight: '600', color: c.accent },
     cardTitle: { fontSize: 15, fontWeight: '600', color: c.ink },
     segment: { flexDirection: 'row', padding: 2, borderRadius: 10, backgroundColor: c.photoBg },
     segItem: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
