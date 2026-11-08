@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
 import { dayKeyOf, monthTitle } from '@/domain/dates';
+import { isVideo } from '@/domain/post';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { listFeedPage, listOnThisDay, monthCounts, type FeedPage, type IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
@@ -16,6 +17,7 @@ import { PostCard } from '@/ui/PostCard';
 import { RestoreOffer } from '@/ui/RestoreOffer';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
+import { VideoBadge } from '@/ui/VideoBadge';
 
 const GRID_GAP = 2;
 const PAGE_SIZE = 30;
@@ -161,12 +163,15 @@ export default function Feed() {
             return (
               <Pressable onPress={() => router.push(`/post/${item.post.id}`)} style={{ width: cell, height: cell }}>
                 {cover ? (
-                  <Image
-                    source={{ uri: mediaUri(item.dir, cover.thumb) }}
-                    style={styles.fill}
-                    contentFit="cover"
-                    recyclingKey={item.post.id}
-                  />
+                  <>
+                    <Image
+                      source={{ uri: mediaUri(item.dir, cover.thumb) }}
+                      style={styles.fill}
+                      contentFit="cover"
+                      recyclingKey={item.post.id}
+                    />
+                    {isVideo(cover) && <VideoBadge size="small" />}
+                  </>
                 ) : (
                   <View style={[styles.fill, styles.textTile]}>
                     <Text style={styles.textTileText} numberOfLines={5}>

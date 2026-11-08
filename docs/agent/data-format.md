@@ -12,7 +12,8 @@ plenka/
       └─ DD-HHmm_<last 8 chars of id>/
          ├─ post.json
          ├─ media/01.webp        main image (or 01.jpg/.png/.heic in "original" mode)
-         └─ thumbs/01.webp       640 px thumbnail
+         ├─ media/02.mp4         video, byte copy (or .mov/.3gp/.webm/.mkv)
+         └─ thumbs/01.webp       640 px thumbnail (for a video: one frame of it)
 ```
 
 On the phone a `media/*` original may be missing (after a merge from the cloud or «Освободить место»); the cloud copy is complete. Thumbnails and `post.json` are always present. Readers fall back to the thumbnail.
@@ -35,7 +36,7 @@ On the phone a `media/*` original may be missing (after a merge from the cloud o
 | `media` | MediaItem[] | Order = display order, first is the cover |
 | `deleted` | boolean | Tombstone: `true` + empty `media` |
 
-MediaItem: `{ file, thumb, type: "image", w, h, bytes, sha256, quality? }` — paths are relative to the post folder; `w`/`h` are display dimensions after EXIF orientation; `sha256` is hex of the stored file; `quality` is `original` / `visual` / `compact` (optional, added 2026-10-27; when missing, readers infer it: not `.webp` → `original`, long side ≤ 1600 → `compact`, else `visual`).
+MediaItem: `{ file, thumb, type: "image" | "video", w, h, bytes, sha256, quality?, duration? }` — paths are relative to the post folder; `w`/`h` are display dimensions after EXIF orientation; `sha256` is hex of the stored file; `quality` is `original` / `visual` / `compact` (optional, added 2026-10-27; when missing, readers infer it: not `.webp` → `original`, long side ≤ 1600 → `compact`, else `visual`). `type: "video"` (added 2026-11-08, still `plenka/1`: older readers just see the thumbnail) — `file` is a byte copy of the picked/recorded video, never re-encoded; `w`/`h` are display dimensions (rotation applied); `duration` is seconds, one decimal; `quality` is absent and has no meaning for videos.
 
 The human-facing number `№ N` is not part of the format: it is the post's rank by `createdAt`. Early test posts may still contain a `frame` field; it is ignored.
 

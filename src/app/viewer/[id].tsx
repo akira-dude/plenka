@@ -6,13 +6,14 @@ import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import Feather from '@expo/vector-icons/Feather';
-import { sharePhoto } from '@/device/share';
+import { shareMedia } from '@/device/share';
 import { useDbQuery } from '@/hooks/useDbQuery';
-import type { MediaItem } from '@/domain/post';
+import { isVideo, type MediaItem } from '@/domain/post';
 import { useMediaUri } from '@/hooks/useMediaUri';
 import { setPhotoPage } from '@/hooks/usePhotoPage';
 import { getPost } from '@/storage/posts';
 import { originalUri } from '@/sync/media';
+import { ViewerVideo } from '@/ui/ViewerVideo';
 import { ZoomableImage } from '@/ui/ZoomableImage';
 import { fonts } from '@/ui/theme';
 
@@ -35,7 +36,7 @@ export default function Viewer() {
   const db = useSQLiteContext();
   const share = (dir: string, m: MediaItem) =>
     originalUri(db, dir, m)
-      .then(sharePhoto)
+      .then((uri) => shareMedia(uri, m))
       .catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
 
   const current = data && media.length ? media[Math.min(page, media.length - 1)] : null;
@@ -59,8 +60,9 @@ export default function Viewer() {
             setPage(next);
             setPhotoPage(id, next);
           }}
-          renderItem={({ item }) => (
+          renderItem={({ item, index: i }) => (
             <ViewerPage
+              active={i === page}
               dir={data.dir}
               item={item}
               width={width}
@@ -83,7 +85,7 @@ export default function Viewer() {
         <Pressable
           style={styles.button}
           hitSlop={8}
-          accessibilityLabel="Поделиться фото"
+          accessibilityLabel={current && isVideo(current) ? 'Поделиться видео' : 'Поделиться фото'}
           disabled={!current}
           onPress={() => data && current && share(data.dir, current)}
         >
@@ -101,9 +103,17 @@ type PageProps = {
   height: number;
   onZoomChange: (zoomed: boolean) => void;
   onShare: () => void;
+  active: boolean;
 };
 
-function ViewerPage({ dir, item, width, height, onZoomChange, onShare }: PageProps) {
+function ViewerPage({ active, ...props }: PageProps) {
+  if (isVideo(props.item)) {
+    return <ViewerVideo dir={props.dir} item={props.item} width={props.width} height={props.height} active={active} />;
+  }
+  return <ViewerImage {...props} />;
+}
+
+function ViewerImage({ dir, item, width, height, onZoomChange, onShare }: Omit<PageProps, 'active'>) {
   const uri = useMediaUri(dir, item, true);
   return (
     <ZoomableImage

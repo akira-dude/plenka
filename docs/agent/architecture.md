@@ -5,11 +5,11 @@
 ```
 src/app (routes, screens)
    │  uses
-   ├── src/ui        PhotoFrame, PostCard, PostRow, ZoomableImage, ThemeProvider, mapHtml
+   ├── src/ui        PhotoFrame, PostCard, PostRow, ZoomableImage, ViewerVideo, VideoBadge, ThemeProvider, mapHtml
    ├── src/hooks     useDbQuery
    ├── src/device    location (GPS, reverse geocoding)
    ├── src/sync      CloudStore interface, Google Drive store, sync engine, lazy originals
-   └── src/storage   posts (repository) ── photos ── paths ── files ── db ── settings
+   └── src/storage   posts (repository) ── photos / videos ── paths ── files ── db ── settings
                          │
                      src/domain   post format, dates, ulid  (pure, no Expo UI)
 ```
@@ -40,11 +40,18 @@ src/app (routes, screens)
 
 ## Photos (`src/storage/photos.ts`)
 
-- Source: `expo-image-picker` (system camera intent or Android Photo Picker). Captured photos land in the app cache, not in the gallery; picked ones are copies. No storage permission is needed on Android 13+.
+- Source: `expo-image-picker` (system camera intent or Android Photo Picker; the picker offers photos and videos, compose has separate «Фото» / «Видео» camera tiles). Captured media lands in the app cache, not in the gallery; picked items are copies. No storage permission is needed on Android 13+.
 - Quality modes (`settings.ts` → `PhotoQuality`): `visual` = WebP 0.9 at full resolution after EXIF orientation is applied; `compact` = WebP 0.85 with the long side scaled down to 1600 px (aspect kept, smaller photos untouched); `original` = byte-for-byte copy. `w`/`h` in `post.json` are the stored dimensions. Each new media item records its `quality`; older items get it inferred by `mediaQuality` (`src/domain/post.ts`). Order from best to lowest: `original` → `visual` → `compact`; quality can only go down: `savePost` re-encodes kept photos above the chosen level (`recompressPhoto`, same number, thumbnail rebuilt), never up.
 - Thumbnail: WebP 0.8, longest side 640 px, used for grid, calendar, blur backgrounds.
 - `sha256` of the stored file goes into `post.json` (dedup key for upload later).
 - EXIF date/GPS are read in the editor (`parseExifDate`, `parseExifGps`) to prefill the post; they are not copied into the WebP.
+
+## Videos (`src/storage/videos.ts`)
+
+- `storeVideo` copies the file byte for byte (no transcoding in Expo; quality modes apply to photos only, `needsRecompress` skips videos), then renders one frame (at min(1 s, duration / 3)) via `expo-video` `generateThumbnailsAsync` into the usual 640 px WebP thumbnail. `w`/`h` take the picker's sides oriented by the frame, so rotated clips get the right ratio.
+- Display: everywhere outside the viewer a video is its thumbnail plus `VideoBadge` (play icon + duration); `MediaFrame` never fetches a video original. The viewer page for a video is `ViewerVideo`: downloads the original if missing (spinner, readable message offline), then `VideoView` with native controls; it plays while its page is current and pauses when swiped away. No zoom or swipe gestures on a video page.
+- Share: `shareMedia` sends a video file as is with its MIME type (photos still go through the JPEG render).
+- Sync, merge, lazy originals and «Освободить место» treat a video like any other media file; MIME types come from `mimeOf` (`src/domain/post.ts`).
 
 ## Display rules
 
@@ -64,7 +71,7 @@ src/app (routes, screens)
 | Settings | `src/app/(tabs)/settings.tsx` | Drive status (placeholder), theme, photo quality, storage usage, rebuild index |
 | Compose | `src/app/compose.tsx` | Params: `id` (edit), `date` (prefill day), `source` (`camera` / `library` to open the picker immediately). Per-post photo quality switch: a new post defaults to the setting and offers all three; an edit defaults to the best quality among kept photos and, while no photos are added, offers only that level and lower; hidden when only `compact` is left. Adding a photo brings back all three, because the choice also sets the level of the new photos. On save, kept photos above the chosen level are re-encoded down to it (the note warns), kept photos at or below it stay as they are, so a post can mix levels. `KeyboardAwareScrollView` + «Сохранить» in the header so the keyboard never hides the action |
 | Post | `src/app/post/[id].tsx` | Pager (shared current photo, see the feed row), text, tags (chips → search via `openTagSearch`, `TagLinks`), place link → map; header: edit, delete (red) |
-| Viewer | `src/app/viewer/[id].tsx` | Full-screen black pager with zoom, param `index` |
+| Viewer | `src/app/viewer/[id].tsx` | Full-screen black pager with zoom (photos) or a player (videos, `ViewerVideo`), param `index` |
 | Map | `src/app/map.tsx` | WebView with Leaflet (unpkg) and OpenStreetMap tiles, needs internet. The WebView `baseUrl` is the GitHub Pages site so OSM gets a Referer (without it OSM returns "Access blocked"; CARTO basemaps now need an API key); dark theme inverts the tile layer with a CSS filter; param `focus` = post id; popup button posts the id back |
 
 Screens reload their data on focus via `useDbQuery`; there is no global store.
@@ -95,7 +102,7 @@ Screens reload their data on focus via `useDbQuery`; there is no global store.
 
 ## Sharing
 
-`src/device/share.ts` → `sharePhoto(uri)`: renders the stored image to a temporary JPEG (0.92) in the cache and opens the system share sheet via `expo-sharing`. JPEG instead of WebP because messengers may turn a WebP into a sticker. Only the previous temp file is kept and replaced on the next share. Entry points: share icon in the post header (current pager photo), share button and swipe up in the viewer. The `expo-sharing` config plugin is listed in `app.json` with defaults; receiving shares from other apps stays disabled (`android.enabled` is false by default) — do not enable it without a request.
+`src/device/share.ts` → `shareMedia(uri, item)`: a video is shared as the stored file; a photo goes to `sharePhoto(uri)`, which renders the stored image to a temporary JPEG (0.92) in the cache and opens the system share sheet via `expo-sharing`. JPEG instead of WebP because messengers may turn a WebP into a sticker. Only the previous temp file is kept and replaced on the next share. Entry points: share icon in the post header (current pager photo), share button and swipe up in the viewer. The `expo-sharing` config plugin is listed in `app.json` with defaults; receiving shares from other apps stays disabled (`android.enabled` is false by default) — do not enable it without a request.
 
 ## System navigation bar
 

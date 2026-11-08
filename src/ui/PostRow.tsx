@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { formatStamp } from '@/domain/dates';
+import { isVideo, mediaSummary } from '@/domain/post';
 import type { IndexedPost } from '@/storage/posts';
 import { mediaUri } from '@/storage/paths';
 import { fonts, type Palette } from './theme';
@@ -22,7 +23,7 @@ export function PostRow({ item, showDate = false }: { item: IndexedPost; showDat
       <View style={styles.body}>
         <Text style={styles.meta}>
           № {frame} · {when}
-          {post.media.length > 1 ? ` · ${post.media.length} фото` : ''}
+          {post.media.length > 1 || post.media.some(isVideo) ? ` · ${mediaSummary(post.media)}` : ''}
         </Text>
         <Text style={styles.text} numberOfLines={2}>
           {post.text || 'Без текста'}

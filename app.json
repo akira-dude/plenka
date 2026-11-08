@@ -53,7 +53,8 @@
         {
           "enforceContrast": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "router": {

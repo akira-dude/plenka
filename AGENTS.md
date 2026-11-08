@@ -1,6 +1,6 @@
 # Plenka (Плёнка) — agent guide
 
-Personal offline-first photo diary for Android. Expo + React Native + TypeScript. One user, one phone, no video, no encryption; sharing is limited to sending a single photo through the system share sheet. Every post is a plain folder (`post.json` + images); Google Drive is the backup that can be merged back into the phone (`src/sync/`).
+Personal offline-first photo diary for Android. Expo + React Native + TypeScript. One user, one phone, photos and videos, no encryption; sharing is limited to sending a single photo or video through the system share sheet. Every post is a plain folder (`post.json` + media); Google Drive is the backup that can be merged back into the phone (`src/sync/`).
 
 Details are read on demand: `docs/agent/INDEX.md`.
 
@@ -15,9 +15,9 @@ Details are read on demand: `docs/agent/INDEX.md`.
 | --- | --- |
 | `src/app/` | Expo Router routes only. `(tabs)/` = bottom tabs (feed, archive, camera, search, settings), `compose.tsx` = new/edit post, `post/[id].tsx` = post view, `viewer/[id].tsx` = full-screen zoom, `map.tsx` = map of posts |
 | `src/domain/` | Pure logic, no React / Expo UI: `post.ts` (format types, parsing), `dates.ts` (ru formatting, local ISO, calendar), `search.ts` (search words, `#tag` queries, tag counts and suggestions, highlight, snippet), `ulid.ts` |
-| `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
+| `src/storage/` | Disk + SQLite. `posts.ts` is the repository (the only writer of posts), `photos.ts` converts images, `videos.ts` copies videos and renders their thumbnail frame, `paths.ts` folder layout, `db.ts` migrations, `settings.ts` key/value |
 | `src/ui/` | Shared components, `theme.ts` (light/dark palettes), `ThemeProvider.tsx` (`useTheme`, `useStyles`), `mapHtml.ts` (Leaflet page for the map WebView) |
-| `src/device/` | Device services: `location.ts` (GPS, reverse geocoding), `share.ts` (send one photo as JPEG through the system share sheet) |
+| `src/device/` | Device services: `location.ts` (GPS, reverse geocoding), `share.ts` (send one photo as JPEG or one video as is through the system share sheet) |
 | `src/sync/` | Cloud backup: `store.ts` (`CloudStore` interface), `driveStore.ts` (Google Drive implementation, path ↔ id mapping), `drive.ts` (REST v3 client), `webdavStore.ts` + `webdav.ts` (own server over WebDAV), `auth.ts` (Google sign-in, web client id), `engine.ts` (outbox → cloud, `mergeFromCloud`, `useSyncState`), `media.ts` (lazy originals, free up space), `useAutoSync.ts` (triggers) |
 | `src/hooks/` | `useDbQuery` — reload a query on screen focus |
 | `plugins/` | Local Expo config plugins (`withFragileUserData` → keep-data prompt on uninstall) |
@@ -29,8 +29,8 @@ Details are read on demand: `docs/agent/INDEX.md`.
 
 1. **Files are the source of truth, SQLite is a rebuildable index.** Any post change goes through `src/storage/posts.ts` (`savePost`, `deletePost`), which writes `post.json` atomically, then the index row, then the outbox row. Never write post data only to SQLite.
 2. **The on-disk format is a contract** (`docs/agent/data-format.md`): it must stay readable by a fresh install merging from the cloud. Changing a field → bump `POST_FORMAT` in `src/domain/post.ts`, update the doc, keep `parsePost` able to read old posts.
-3. **Photos never depend on the system gallery.** Picked or captured images are always copied/converted into the post folder. Never store a gallery URI in a post.
-4. **Never crop or change the aspect ratio of a stored photo.** Display-only framing lives in `src/ui/PhotoFrame.tsx`.
+3. **Media never depends on the system gallery.** Picked or captured photos and videos are always copied/converted into the post folder. Never store a gallery URI in a post.
+4. **Never crop or change the aspect ratio of a stored photo; never re-encode a stored video.** Display-only framing lives in `src/ui/PhotoFrame.tsx`.
 5. Routes in `src/app/` stay thin; non-route code goes to `src/domain`, `src/storage`, `src/ui`, `src/hooks`. Import via `@/…`.
 6. No comments in code except a rare one-line note on a non-obvious platform quirk.
 7. Android only. Do not add iOS/web-specific code paths.

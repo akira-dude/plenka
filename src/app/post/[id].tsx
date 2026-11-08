@@ -4,12 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import Feather from '@expo/vector-icons/Feather';
-import { sharePhoto } from '@/device/share';
+import { shareMedia } from '@/device/share';
 import { formatStamp } from '@/domain/dates';
 import { useDbQuery } from '@/hooks/useDbQuery';
 import { setPhotoPage, usePhotoPage } from '@/hooks/usePhotoPage';
 import { deletePost, getPost } from '@/storage/posts';
-import type { MediaItem } from '@/domain/post';
+import { isVideo, type MediaItem } from '@/domain/post';
 import { syncNow, syncedRev, useSyncState } from '@/sync/engine';
 import { originalUri } from '@/sync/media';
 import { MediaFrame } from '@/ui/MediaFrame';
@@ -47,7 +47,7 @@ export default function PostScreen() {
   }, [page, photoCount]);
 
   const confirmDelete = () =>
-    Alert.alert('Удалить запись?', 'Фото этой записи удалятся с телефона.', [
+    Alert.alert('Удалить запись?', 'Фото и видео этой записи удалятся с телефона.', [
       { text: 'Отмена', style: 'cancel' },
       {
         text: 'Удалить',
@@ -62,7 +62,7 @@ export default function PostScreen() {
 
   const share = (dir: string, m: MediaItem) =>
     originalUri(db, dir, m)
-      .then(sharePhoto)
+      .then((uri) => shareMedia(uri, m))
       .catch((e: unknown) => Alert.alert('Не удалось поделиться', e instanceof Error ? e.message : String(e)));
 
   if (!data || data.post.deleted) {
@@ -71,6 +71,7 @@ export default function PostScreen() {
 
   const { post, dir, frame } = data;
   const first = post.media[0];
+  const shown = post.media[Math.min(page, post.media.length - 1)];
   const frameRatio = first ? clampRatio(first.w / first.h, width / (height * MAX_PHOTO_SHARE), PANORAMA_RATIO) : 1;
   const hasCoords = post.place?.lat != null && post.place.lon != null;
   const status = !sync.target
@@ -90,8 +91,8 @@ export default function PostScreen() {
                 <Pressable
                   style={styles.action}
                   hitSlop={6}
-                  accessibilityLabel="Поделиться фото"
-                  onPress={() => share(dir, post.media[Math.min(page, post.media.length - 1)])}
+                  accessibilityLabel={isVideo(shown) ? 'Поделиться видео' : 'Поделиться фото'}
+                  onPress={() => share(dir, shown)}
                 >
                   <Feather name="share-2" size={18} color={colors.ink} />
                 </Pressable>

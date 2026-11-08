@@ -41,7 +41,7 @@ export function fetchOriginal(db: SQLiteDatabase, dir: string, m: MediaItem): Pr
 
 export async function originalUri(db: SQLiteDatabase, dir: string, m: MediaItem): Promise<string> {
   if (await fetchOriginal(db, dir, m)) return mediaUri(dir, m.file);
-  throw new Error('Полное фото хранится только в облаке, а скачать его сейчас не получилось. Проверь интернет.');
+  throw new Error('Оригинал хранится только в облаке, а скачать его сейчас не получилось. Проверь интернет.');
 }
 
 export type Freeable = { files: File[]; bytes: number };

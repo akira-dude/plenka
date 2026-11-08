@@ -3,8 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { dayKey, toLocalIso } from '@/domain/dates';
 import {
   POST_FORMAT,
-  isLowerQuality,
-  mediaQuality,
+  needsRecompress,
   parsePost,
   type MediaItem,
   type Place,
@@ -15,8 +14,9 @@ import { ulid } from '@/domain/ulid';
 import { migrate } from './db';
 import { deleteIfExists, moveTree, readJson, writeJsonAtomic } from './files';
 import { dirOf, postDirName, postsDir, rootDir } from './paths';
-import { nextMediaNumber, recompressPhoto, storePhoto, type PickedPhoto } from './photos';
+import { nextMediaNumber, recompressPhoto, storePhoto, type PickedMedia } from './photos';
 import type { PhotoQuality } from './settings';
+import { storeVideo } from './videos';
 
 export type IndexedPost = { post: Post; dir: string; frame: number };
 
@@ -26,7 +26,7 @@ export type Draft = {
   tags: string[];
   place: Place | null;
   keep: MediaItem[];
-  add: PickedPhoto[];
+  add: PickedMedia[];
 };
 
 type Row = { json: string; dir: string; frame: number };
@@ -201,12 +201,15 @@ export async function savePost(
 
   const stored: MediaItem[] = [];
   for (const m of draft.keep) {
-    stored.push(isLowerQuality(quality, mediaQuality(m)) ? await recompressPhoto(dir, m, quality) : m);
+    stored.push(needsRecompress(m, quality) ? await recompressPhoto(dir, m, quality) : m);
   }
 
   let number = nextMediaNumber(draft.keep);
   const added: MediaItem[] = [];
-  for (const photo of draft.add) added.push(await storePhoto(photo, dir, number++, quality));
+  for (const item of draft.add) {
+    const n = number++;
+    added.push(item.type === 'video' ? await storeVideo(item, dir, n) : await storePhoto(item, dir, n, quality));
+  }
 
   const post: Post = {
     format: POST_FORMAT,

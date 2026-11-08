@@ -1,20 +1,22 @@
 import { Directory, File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { COMPACT_SIDE, type MediaItem, type PhotoQuality } from '@/domain/post';
+import { COMPACT_SIDE, type MediaItem, type MediaType, type PhotoQuality } from '@/domain/post';
 import { deleteIfExists } from './files';
 
-export type PickedPhoto = {
+export type PickedMedia = {
+  type: MediaType;
   uri: string;
   width: number;
   height: number;
   mimeType?: string;
   exif?: Record<string, unknown> | null;
+  duration?: number;
 };
 
-const THUMB_SIDE = 640;
+export const THUMB_SIDE = 640;
 const VISUAL_QUALITY = 0.9;
 const COMPACT_QUALITY = 0.85;
-const THUMB_QUALITY = 0.8;
+export const THUMB_QUALITY = 0.8;
 
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -24,20 +26,20 @@ const EXTENSIONS: Record<string, string> = {
   'image/heif': 'heif',
 };
 
-function originalExtension(photo: PickedPhoto): string {
+function originalExtension(photo: PickedMedia): string {
   if (photo.mimeType && EXTENSIONS[photo.mimeType]) return EXTENSIONS[photo.mimeType];
   const ext = photo.uri.split('?')[0].split('.').pop()?.toLowerCase();
   return ext && ext.length <= 4 ? ext : 'jpg';
 }
 
-const mediaNumber = (file: string) => Number(file.match(/(\d+)\.\w+$/)?.[1] ?? 0);
+export const mediaNumber = (file: string) => Number(file.match(/(\d+)\.\w+$/)?.[1] ?? 0);
 
 export function nextMediaNumber(media: MediaItem[]): number {
   return Math.max(0, ...media.map((m) => mediaNumber(m.file))) + 1;
 }
 
 export async function storePhoto(
-  photo: PickedPhoto,
+  photo: PickedMedia,
   postDir: Directory,
   number: number,
   quality: PhotoQuality,
@@ -99,7 +101,7 @@ export async function recompressPhoto(postDir: Directory, item: MediaItem, quali
   const source = new File(postDir, item.file);
   if (!source.exists) return item;
   const next = await storePhoto(
-    { uri: source.uri, width: item.w, height: item.h },
+    { type: 'image', uri: source.uri, width: item.w, height: item.h },
     postDir,
     mediaNumber(item.file),
     quality,

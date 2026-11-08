@@ -5,15 +5,18 @@ export type PhotoQuality = 'original' | 'visual' | 'compact';
 export const QUALITY_ORDER: PhotoQuality[] = ['original', 'visual', 'compact'];
 export const COMPACT_SIDE = 1600;
 
+export type MediaType = 'image' | 'video';
+
 export type MediaItem = {
   file: string;
   thumb: string;
-  type: 'image';
+  type: MediaType;
   w: number;
   h: number;
   bytes: number;
   sha256: string;
   quality?: PhotoQuality;
+  duration?: number;
 };
 
 export type Place = {
@@ -43,8 +46,13 @@ export function mediaQuality(m: MediaItem): PhotoQuality {
 
 export const isLowerQuality = (a: PhotoQuality, b: PhotoQuality) => QUALITY_ORDER.indexOf(a) > QUALITY_ORDER.indexOf(b);
 
+export const isVideo = (m: { type?: string }) => m.type === 'video';
+
+export const needsRecompress = (m: MediaItem, target: PhotoQuality) =>
+  !isVideo(m) && isLowerQuality(target, mediaQuality(m));
+
 export function bestQuality(media: MediaItem[]): PhotoQuality | null {
-  const ranks = media.map((m) => QUALITY_ORDER.indexOf(mediaQuality(m)));
+  const ranks = media.filter((m) => !isVideo(m)).map((m) => QUALITY_ORDER.indexOf(mediaQuality(m)));
   return ranks.length ? QUALITY_ORDER[Math.min(...ranks)] : null;
 }
 
@@ -65,6 +73,37 @@ export function parsePost(raw: unknown): Post | null {
     deleted: p.deleted === true,
   };
 }
+
+export function mediaSummary(media: { type?: string }[]): string {
+  const videos = media.filter(isVideo).length;
+  const photos = media.length - videos;
+  return [photos ? `${photos} фото` : '', videos ? `${videos} видео` : ''].filter(Boolean).join(', ');
+}
+
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+const MIME: Record<string, string> = {
+  webp: 'image/webp',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  '3gp': 'video/3gpp',
+  webm: 'video/webm',
+  mkv: 'video/x-matroska',
+  json: 'application/json',
+};
+
+export const mimeOf = (path: string) => MIME[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
 export function parseTags(input: string): string[] {
   const tags = input

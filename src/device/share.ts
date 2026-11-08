@@ -1,6 +1,7 @@
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as Sharing from 'expo-sharing';
+import { isVideo, mimeOf, type MediaItem } from '@/domain/post';
 
 const SHARE_QUALITY = 0.92;
 
@@ -14,4 +15,10 @@ export async function sharePhoto(uri: string): Promise<void> {
   image.release();
   lastShared = new File(saved.uri);
   await Sharing.shareAsync(saved.uri, { mimeType: 'image/jpeg', dialogTitle: 'Поделиться фото' });
+}
+
+export async function shareMedia(uri: string, item: MediaItem): Promise<void> {
+  if (!isVideo(item)) return sharePhoto(uri);
+  if (!(await Sharing.isAvailableAsync())) throw new Error('На этом телефоне недоступно меню «Поделиться».');
+  await Sharing.shareAsync(uri, { mimeType: mimeOf(item.file), dialogTitle: 'Поделиться видео' });
 }

@@ -3,17 +3,7 @@ import type { File } from 'expo-file-system';
 export const parentOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
 export const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
-const MIME: Record<string, string> = {
-  webp: 'image/webp',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  heic: 'image/heic',
-  heif: 'image/heif',
-  json: 'application/json',
-};
-
-export const mimeOf = (path: string) => MIME[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
+export { mimeOf } from '@/domain/post';
 
 export interface CloudStore {
   readonly label: string;

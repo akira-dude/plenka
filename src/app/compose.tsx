@@ -10,19 +10,21 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Feather from '@expo/vector-icons/Feather';
 import { currentCoords, formatCoords, placeName, type Coords } from '@/device/location';
 import { formatDateTime, parseDayKey, parseExifDate, parseExifGps } from '@/domain/dates';
-import { bestQuality, isLowerQuality, mediaQuality, parseTags, type MediaItem } from '@/domain/post';
+import { bestQuality, isLowerQuality, isVideo, needsRecompress, parseTags, type MediaItem } from '@/domain/post';
 import { replaceFragment, suggestTags, type TagCount } from '@/domain/search';
 import { mediaUri } from '@/storage/paths';
-import type { PickedPhoto } from '@/storage/photos';
+import type { PickedMedia } from '@/storage/photos';
 import { getPost, listTags, savePost } from '@/storage/posts';
 import { getPhotoQuality, type PhotoQuality } from '@/storage/settings';
 import { syncNow } from '@/sync/engine';
 import { originalUri } from '@/sync/media';
 import { TagSuggestions } from '@/ui/TagSuggestions';
+import { VideoBadge } from '@/ui/VideoBadge';
 import { space, type Palette } from '@/ui/theme';
 import { useStyles, useTheme } from '@/ui/ThemeProvider';
 
-type Params = { id?: string; date?: string; source?: 'camera' | 'library' };
+type Params = { id?: string; date?: string; source?: PickSource };
+type PickSource = 'camera' | 'video' | 'library';
 type CoordsSource = 'post' | 'photo' | 'device';
 
 const THUMB = 76;
@@ -52,7 +54,7 @@ export default function Compose() {
   const [loaded, setLoaded] = useState(!editing);
   const [dir, setDir] = useState<string | null>(null);
   const [keep, setKeep] = useState<MediaItem[]>([]);
-  const [added, setAdded] = useState<PickedPhoto[]>([]);
+  const [added, setAdded] = useState<PickedMedia[]>([]);
   const [text, setText] = useState('');
   const [tags, setTags] = useState('');
   const [place, setPlace] = useState('');
@@ -130,27 +132,37 @@ export default function Compose() {
   }, [autoLocate, locate]);
 
   const pick = useCallback(
-    async (source: 'camera' | 'library') => {
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 1, exif: true };
+    async (source: PickSource) => {
+      const options: ImagePicker.ImagePickerOptions = { quality: 1, exif: true };
       let result: ImagePicker.ImagePickerResult;
-      if (source === 'camera') {
+      if (source !== 'library') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
           Alert.alert('Нет доступа к камере', 'Разреши Плёнке доступ к камере в настройках Android.');
           return;
         }
-        result = await ImagePicker.launchCameraAsync(options);
+        result = await ImagePicker.launchCameraAsync({
+          ...options,
+          mediaTypes: [source === 'video' ? 'videos' : 'images'],
+        });
       } else {
-        result = await ImagePicker.launchImageLibraryAsync({ ...options, allowsMultipleSelection: true, orderedSelection: true });
+        result = await ImagePicker.launchImageLibraryAsync({
+          ...options,
+          mediaTypes: ['images', 'videos'],
+          allowsMultipleSelection: true,
+          orderedSelection: true,
+        });
       }
       if (result.canceled) return;
 
-      const photos: PickedPhoto[] = result.assets.map((a) => ({
+      const photos: PickedMedia[] = result.assets.map((a) => ({
+        type: a.type === 'video' ? 'video' : 'image',
         uri: a.uri,
         width: a.width,
         height: a.height,
         mimeType: a.mimeType,
         exif: a.exif,
+        duration: a.duration ? a.duration / 1000 : undefined,
       }));
       setAdded((prev) => [...prev, ...photos]);
 
@@ -198,10 +210,14 @@ export default function Compose() {
 
   const empty = keep.length === 0 && added.length === 0 && !text.trim();
 
-  const ceiling = editing && added.length === 0 ? bestQuality(keep) : null;
+  const addedPhotos = added.filter((a) => !isVideo(a)).length;
+  const hasPhotos = addedPhotos > 0 || keep.some((m) => !isVideo(m));
+  const hasVideo = added.some(isVideo) || keep.some(isVideo);
+  const showQuality = hasPhotos || (keep.length === 0 && added.length === 0);
+  const ceiling = editing && addedPhotos === 0 ? bestQuality(keep) : null;
   const qualityOptions = ceiling ? QUALITY_LABELS.filter((o) => !isLowerQuality(ceiling, o.value)) : QUALITY_LABELS;
   const chosen = quality && ceiling && isLowerQuality(ceiling, quality) ? ceiling : quality;
-  const recompress = chosen !== null && keep.some((m) => isLowerQuality(chosen, mediaQuality(m)));
+  const recompress = chosen !== null && keep.some((m) => needsRecompress(m, chosen));
 
   const save = async () => {
     if (empty || saving) return;
@@ -210,7 +226,7 @@ export default function Compose() {
       const name = place.trim();
       const target = chosen ?? (await getPhotoQuality(db));
       for (const m of keep) {
-        if (dir && isLowerQuality(target, mediaQuality(m))) await originalUri(db, dir, m);
+        if (dir && needsRecompress(m, target)) await originalUri(db, dir, m);
       }
       const post = await savePost(
         db,
@@ -269,15 +285,27 @@ export default function Compose() {
             <Thumb
               key={m.file}
               uri={dir ? mediaUri(dir, m.thumb) : ''}
+              video={isVideo(m)}
+              duration={m.duration}
               onRemove={() => setKeep((prev) => prev.filter((k) => k.file !== m.file))}
             />
           ))}
           {added.map((p) => (
-            <Thumb key={p.uri} uri={p.uri} onRemove={() => setAdded((prev) => prev.filter((a) => a.uri !== p.uri))} />
+            <Thumb
+              key={p.uri}
+              uri={p.uri}
+              video={isVideo(p)}
+              duration={p.duration}
+              onRemove={() => setAdded((prev) => prev.filter((a) => a.uri !== p.uri))}
+            />
           ))}
           <Pressable style={styles.addTile} onPress={() => pick('camera')}>
             <Feather name="camera" size={20} color={colors.muted} />
-            <Text style={styles.addTileText}>Камера</Text>
+            <Text style={styles.addTileText}>Фото</Text>
+          </Pressable>
+          <Pressable style={styles.addTile} onPress={() => pick('video')}>
+            <Feather name="video" size={20} color={colors.muted} />
+            <Text style={styles.addTileText}>Видео</Text>
           </Pressable>
           <Pressable style={styles.addTile} onPress={() => pick('library')}>
             <Feather name="image" size={20} color={colors.muted} />
@@ -285,7 +313,7 @@ export default function Compose() {
           </Pressable>
         </ScrollView>
 
-        {qualityOptions.length > 1 && (
+        {showQuality && qualityOptions.length > 1 && (
           <View style={styles.qualityBlock}>
             <Text style={styles.label}>Качество фото в этой записи</Text>
             <View style={styles.segment}>
@@ -309,6 +337,7 @@ export default function Compose() {
                 : editing && keep.length > 0
                   ? ' Уже сохранённые фото не изменятся.'
                   : ''}
+              {hasVideo ? ' Видео сохраняется как есть, без сжатия.' : ''}
             </Text>
           </View>
         )}
@@ -385,12 +414,15 @@ export default function Compose() {
   );
 }
 
-function Thumb({ uri, onRemove }: { uri: string; onRemove: () => void }) {
+type ThumbProps = { uri: string; video: boolean; duration?: number; onRemove: () => void };
+
+function Thumb({ uri, video, duration, onRemove }: ThumbProps) {
   const styles = useStyles(makeStyles);
   const { colors } = useTheme();
   return (
     <View style={styles.thumb}>
       <Image source={{ uri }} style={styles.thumbImage} contentFit="cover" />
+      {video && <VideoBadge duration={duration} size="small" />}
       <Pressable style={styles.remove} onPress={onRemove} hitSlop={8}>
         <Feather name="x" size={12} color={colors.onAccent} />
       </Pressable>
